@@ -93,6 +93,10 @@ class UnifiedDatasetLoader:
         self.dos_donts_index = {}  # Fast dos/donts lookup
         self.lock = threading.Lock()  # Thread safety for caching
         
+        # Meal preference cache for faster repeated queries
+        self._preference_cache = {}
+        self._preference_cache_max_size = 100  # Limit cache size
+        
         # Load all datasets
         self._load_all_datasets()
         
@@ -371,6 +375,14 @@ class UnifiedDatasetLoader:
         Returns:
             List of matching meals
         """
+        # Create cache key from preferences
+        cache_key = f"{region}_{diet_type}_{trimester}_{season}_{condition}_{meal_type}"
+        
+        # Check cache first
+        if cache_key in self._preference_cache:
+            return self._preference_cache[cache_key]
+        
+        # If not in cache, compute results
         results = []
         normalized_region = self._normalize_region(region)
         normalized_diet = self._normalize_diet(diet_type)
@@ -436,6 +448,10 @@ class UnifiedDatasetLoader:
             
             if match:
                 results.append(meal)
+        
+        # Store in cache (limit cache size)
+        if len(self._preference_cache) < self._preference_cache_max_size:
+            self._preference_cache[cache_key] = results
         
         return results
     
@@ -655,8 +671,25 @@ class UnifiedDatasetLoader:
         self.meals_by_category = defaultdict(list)  # Organize by category
         self.loading_stats = {'loaded': 0, 'failed': 0, 'by_folder': {}}
         
+        # FAST LOOKUP CACHES
+        self.food_index = {}  # Fast food name lookup
+        self.keyword_index = defaultdict(list)  # Fast keyword-based lookup
+        self.dos_donts_index = {}  # Fast dos/donts lookup
+        self.lock = threading.Lock()  # Thread safety for caching
+        
+        # Meal preference cache for faster repeated queries
+        self._preference_cache = {}
+        self._preference_cache_max_size = 100  # Limit cache size
+        
         # Load all datasets
         self._load_all_datasets()
+        
+        # Build fast lookup indexes
+        try:
+            self._build_fast_indexes()
+        except Exception:
+            pass  # Silently handle index building errors
+        
         self._print_loading_stats()
     
     def _load_all_datasets(self):
