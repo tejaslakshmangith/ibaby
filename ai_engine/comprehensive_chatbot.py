@@ -8,7 +8,6 @@ from ai_engine.unified_dataset_loader import UnifiedDatasetLoader
 from ai_engine.gemini_integration import GeminiNutritionAI
 from dotenv import load_dotenv
 import time
-from openai import OpenAI
 
 # Load environment variables
 load_dotenv()
@@ -494,8 +493,10 @@ class ComprehensiveChatbot:
                 info = self.knowledge_base['foods_to_eat'][keyword]
                 safe_foods.append((keyword, info))
         
+        # Check rate limit before proceeding with AI fallback
         if not self._rate_limit_allows():
-            return "Rate limit reached. Please try again in a minute."
+            return ["⚠️ Rate limit reached. Please try again in a minute."]
+        
         # If any unsafe foods found
         if unsafe_foods:
             answer_parts.append("⚠️ **FOODS TO AVOID:**\n")

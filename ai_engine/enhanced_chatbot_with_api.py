@@ -12,7 +12,6 @@ from datetime import datetime, timedelta
 import pandas as pd
 from functools import lru_cache
 from dotenv import load_dotenv
-from openai import OpenAI
 import warnings
 warnings.filterwarnings('ignore')
 
