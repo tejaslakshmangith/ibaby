@@ -67,12 +67,34 @@ class ComprehensiveChatbot:
         return True
     
     def _create_default_context(self, trimester=None, region=None, diet_type='general'):
-        """Create a default context dictionary for Gemini AI calls."""
+        """
+        Create a default context dictionary for Gemini AI calls.
+        
+        Args:
+            trimester (int, optional): Pregnancy trimester (1, 2, or 3)
+            region (str, optional): User's region preference (e.g., 'North', 'South')
+            diet_type (str): Diet type preference (default: 'general')
+        
+        Returns:
+            dict: Context dictionary with trimester, region, and diet_type keys
+        """
         return {
             'trimester': trimester,
             'region': region,
             'diet_type': diet_type
         }
+    
+    def _format_ai_response(self, answer):
+        """
+        Format AI-powered response with consistent styling and disclaimer.
+        
+        Args:
+            answer (str): The AI-generated response text
+        
+        Returns:
+            str: Formatted response with header and medical disclaimer
+        """
+        return f"🤖 **AI-Powered Answer:**\n\n{answer}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
     
     def _load_all_datasets(self):
         """Load all available datasets from data folder."""
@@ -450,7 +472,7 @@ class ComprehensiveChatbot:
                 context = self._create_default_context(trimester, region)
                 gemini_ans = self.gemini_ai.enhance_chatbot_response(question, context)
                 if gemini_ans:
-                    return f"🤖 **AI-Powered Answer:**\n\n{gemini_ans}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
+                    return self._format_ai_response(gemini_ans)
             
             return self._get_general_answer(intent, trimester)
         
