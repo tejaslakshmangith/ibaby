@@ -1,16 +1,17 @@
-"""AI-Powered Meal Plan Generator using Unified Dataset Integration."""
+"""AI-Powered Meal Plan Generator using Unified Dataset Integration and Gemini AI."""
 import random
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from ai_engine.unified_dataset_loader import UnifiedDatasetLoader
+from ai_engine.gemini_integration import GeminiNutritionAI
 
 
 class MealPlanner:
-    """Generate personalized meal plans for pregnant women using comprehensive datasets."""
+    """Generate personalized meal plans for pregnant women using comprehensive datasets and AI."""
     
     def __init__(self, db, unified_loader: Optional[UnifiedDatasetLoader] = None):
         """
-        Initialize the meal planner with unified dataset integration.
+        Initialize the meal planner with unified dataset integration and AI support.
         
         Args:
             db: Database instance
@@ -18,6 +19,7 @@ class MealPlanner:
         """
         self.db = db
         self.unified_loader = unified_loader or UnifiedDatasetLoader()
+        self.gemini_ai = GeminiNutritionAI()
         self.meal_types = ['breakfast', 'mid_morning_snack', 'lunch', 'evening_snack', 'dinner']
     
     def generate_meal_plan(
@@ -125,6 +127,20 @@ class MealPlanner:
                 meal_frequency
             )
             
+            # Check if AI enhancement is available and add recommendations
+            ai_enhanced = False
+            if self.gemini_ai.available:
+                # Use AI to validate nutrition and provide recommendations
+                ai_nutrition = self.gemini_ai.calculate_advanced_nutrition(
+                    [day['meals'] for day in meal_plan if 'meals' in day]
+                )
+                if ai_nutrition:
+                    ai_enhanced = True
+                    # Merge AI nutrition data if more comprehensive
+                    for nutrient, value in ai_nutrition.items():
+                        if nutrient not in nutrition_totals or nutrition_totals[nutrient] == 0:
+                            nutrition_totals[nutrient] = value
+            
             # Format for table display
             table_format = self._format_meal_plan_table(meal_plan)
             
@@ -133,6 +149,7 @@ class MealPlanner:
                 'nutrition_summary': nutrition_summary,
                 'table_format': table_format,
                 'data_sources_used': list(data_sources_used),
+                'ai_enhanced': ai_enhanced,
                 'preferences': {
                     'region': region,
                     'diet_type': diet_type,
