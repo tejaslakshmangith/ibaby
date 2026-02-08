@@ -94,9 +94,20 @@ def ask_question():
                 'answer': 'Sorry, I encountered an error processing your question. Please try rephrasing it or try again later.'
             }), 500
         
+        # Determine AI backend used based on answer content
+        ai_backend = 'rule_based'
+        answer_text = result.get('answer', '')
+        if 'BERT+Flan-T5' in answer_text:
+            ai_backend = 'bert_flan_t5'
+        elif 'AI-Powered Answer' in answer_text:
+            ai_backend = 'ai_model'  # Gemini or LangChain
+        elif result.get('source') == 'database_cache':
+            ai_backend = 'database'
+        
         # Inject region/season for logging context
         result['region'] = region
         result['season'] = season
+        result['ai_backend'] = ai_backend
         
         # Log interaction
         try:
@@ -130,6 +141,7 @@ def ask_question():
             'keywords': result.get('keywords', []),
             'intent': result.get('intent'),
             'source': result.get('source'),  # 'dataset', 'ai_model', 'fallback'
+            'ai_backend': result.get('ai_backend', 'rule_based'),  # 'bert_flan_t5', 'ai_model', 'database', 'rule_based'
             'response_time': round(result.get('response_time', 0), 2),
             'trimester': trimester,
             'region': region,

@@ -44,6 +44,14 @@ class ComprehensiveChatbot:
         # 2. LangChain + HuggingFace (fallback with multiple options)
         self.langchain_ai = get_langchain_ai()
         
+        # 3. BERT + Flan-T5 (local AI models for semantic search and generation)
+        try:
+            from ai_engine.bert_flan_engine import get_engine
+            self.bert_flan_engine = get_engine()
+        except Exception as e:
+            print(f"⚠ BERT+Flan-T5 engine not available: {e}")
+            self.bert_flan_engine = None
+        
         # Load all datasets through unified loader
         self._load_all_datasets()
         
@@ -60,6 +68,10 @@ class ComprehensiveChatbot:
         print(f"✓ AI timeout: {self.ai_timeout}s")
         print(f"✓ Gemini AI available: {self.gemini_ai.available}")
         print(f"✓ LangChain AI available: {self.langchain_ai.available}")
+        print(f"✓ BERT+Flan-T5 available: {self.bert_flan_engine is not None}")
+        if self.bert_flan_engine:
+            print(f"  - BERT+Flan-T5 loading: {self.bert_flan_engine.is_loading}")
+            print(f"  - BERT+Flan-T5 ready: {self.bert_flan_engine.is_ready}")
         print(f"{'='*80}\n")
 
     def _is_poor_quality_answer(self, answer: str) -> bool:
@@ -114,17 +126,25 @@ class ComprehensiveChatbot:
             'diet_type': diet_type
         }
     
-    def _format_ai_response(self, answer):
+    def _format_ai_response(self, answer, backend: str = 'ai_model'):
         """
         Format AI-powered response with consistent styling and disclaimer.
         
         Args:
             answer (str): The AI-generated response text
         
+            backend (str): The AI backend used (bert_flan_t5, gemini, langchain, ai_model)
         Returns:
             str: Formatted response with header and medical disclaimer
         """
-        return f"🤖 **AI-Powered Answer:**\n\n{answer}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
+        backend_label = {
+            'bert_flan_t5': 'BERT+Flan-T5',
+            'ai_model': 'AI Model',
+            'gemini': 'Gemini AI',
+            'langchain': 'LangChain AI'
+        }.get(backend, 'AI Model')
+        
+        return f"🤖 **AI-Powered Answer ({backend_label}):**\n\n{answer}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
     
     def _load_all_datasets(self):
         """Load all available datasets from data folder."""
@@ -485,7 +505,42 @@ class ComprehensiveChatbot:
             if self._rate_limit_allows():
                 context = self._create_default_context(trimester, region)
                 
-                # Try Gemini first (fast and good quality)
+                # Try BERT+Flan-T5 first (local models, semantic search + generation)
+                if self.bert_flan_engine and self.bert_flan_engine.is_ready:
+                    try:
+                        # Get relevant context from knowledge base using BERT semantic search
+                        all_knowledge = []
+                        for category, items in self.knowledge_base.items():
+                            if isinstance(items, dict):
+                                for key, value in items.items():
+                                    if isinstance(value, str):
+                                        all_knowledge.append(f"{key}: {value}")
+                                    elif isinstance(value, list):
+                                        all_knowledge.extend([str(item) for item in value[:3]])
+                            elif isinstance(items, list):
+                                all_knowledge.extend([str(item) for item in items[:5]])
+                        
+                        # Use BERT to find most relevant knowledge
+                        relevant_texts = self.bert_flan_engine.semantic_search(
+                            query=question,
+                            knowledge_texts=all_knowledge[:100],  # Limit for performance
+                            top_k=5
+                        )
+                        
+                        # Use Flan-T5 to generate answer from relevant context
+                        context_str = "\n".join(relevant_texts)
+                        bert_flan_answer = self.bert_flan_engine.generate_answer(
+                            question=question,
+                            context=context_str,
+                            max_length=256
+                        )
+                        
+                        if bert_flan_answer and len(bert_flan_answer.strip()) > 30:
+                            return f"🤖 **AI-Powered Answer (BERT+Flan-T5):**\n\n{bert_flan_answer}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
+                    except Exception as e:
+                        print(f"⚠ BERT+Flan-T5 generation error: {e}")
+                
+                # Try Gemini second (fast and good quality)
                 gemini_ans = self.gemini_ai.enhance_chatbot_response(question, context)
                 if gemini_ans:
                     return f"🤖 **AI-Powered Answer:**\n\n{gemini_ans}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
@@ -509,7 +564,40 @@ class ComprehensiveChatbot:
             if self._rate_limit_allows():
                 context = self._create_default_context(trimester, region)
                 
-                # Try Gemini first
+                # Try BERT+Flan-T5 first
+                if self.bert_flan_engine and self.bert_flan_engine.is_ready:
+                    try:
+                        # Get relevant context from knowledge base
+                        all_knowledge = []
+                        for category, items in self.knowledge_base.items():
+                            if isinstance(items, dict):
+                                for key, value in items.items():
+                                    if isinstance(value, str):
+                                        all_knowledge.append(f"{key}: {value}")
+                                    elif isinstance(value, list):
+                                        all_knowledge.extend([str(item) for item in value[:3]])
+                            elif isinstance(items, list):
+                                all_knowledge.extend([str(item) for item in items[:5]])
+                        
+                        relevant_texts = self.bert_flan_engine.semantic_search(
+                            query=question,
+                            knowledge_texts=all_knowledge[:100],
+                            top_k=5
+                        )
+                        
+                        context_str = "\n".join(relevant_texts)
+                        bert_flan_answer = self.bert_flan_engine.generate_answer(
+                            question=question,
+                            context=context_str,
+                            max_length=256
+                        )
+                        
+                        if bert_flan_answer and len(bert_flan_answer.strip()) > 30:
+                            return self._format_ai_response(bert_flan_answer, backend='bert_flan_t5')
+                    except Exception as e:
+                        print(f"⚠ BERT+Flan-T5 generation error: {e}")
+                
+                # Try Gemini
                 gemini_ans = self.gemini_ai.enhance_chatbot_response(question, context)
                 if gemini_ans:
                     return self._format_ai_response(gemini_ans)

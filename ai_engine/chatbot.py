@@ -48,12 +48,19 @@ class MaternalFoodChatbot:
         }
     
     def _load_models(self):
-        """Fast initialization without heavy model loading."""
+        """Load BERT + Flan-T5 models via background engine."""
         if self._models_loaded:
             return
-        
-        # Rule-based approach optimized for maternal nutrition
-        self._models_loaded = True
+        try:
+            from ai_engine.bert_flan_engine import get_engine
+            engine = get_engine()
+            self._bert_tokenizer = engine._bert_tokenizer
+            self._bert_model = engine._bert_model
+            self._flan_tokenizer = engine._flan_tokenizer
+            self._flan_model = engine._flan_model
+            self._models_loaded = engine.is_ready
+        except Exception:
+            self._models_loaded = True  # Use rule-based fallback
     
     def classify_intent(self, question: str) -> str:
         """
