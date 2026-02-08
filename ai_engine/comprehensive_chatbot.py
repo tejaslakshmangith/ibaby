@@ -536,7 +536,7 @@ class ComprehensiveChatbot:
                         )
                         
                         if bert_flan_answer and len(bert_flan_answer.strip()) > 30:
-                            return f"🤖 **AI-Powered Answer (BERT+Flan-T5):**\n\n{bert_flan_answer}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
+                            return self._format_ai_response(bert_flan_answer, backend='bert_flan_t5')
                     except Exception as e:
                         print(f"⚠ BERT+Flan-T5 generation error: {e}")
                 

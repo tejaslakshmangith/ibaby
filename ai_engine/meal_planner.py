@@ -366,7 +366,13 @@ class MealPlanner:
         return nutrition
     
     def _get_pregnancy_nutrition_targets(self, trimester: int) -> Dict[str, Dict]:
-        """Get recommended nutrition targets by trimester with comprehensive nutrients."""
+        """Get recommended nutrition targets by trimester with comprehensive nutrients.
+        
+        Calorie targets based on pregnancy requirements:
+        - T1: 1800 kcal (base + 0 extra, focus on quality over quantity)
+        - T2: 2200 kcal (base + 300-400 extra for fetal growth)
+        - T3: 2400 kcal (base + 450-500 extra for final development)
+        """
         targets = {
             1: {
                 'calories': {'daily': 1800, 'unit': 'kcal'},

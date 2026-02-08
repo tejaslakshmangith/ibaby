@@ -61,7 +61,7 @@ def register():
         user = User(
             username=username,
             email=email,
-            full_name=username,  # Use username as default display name
+            full_name=username,  # Use username as default display name (can be updated in profile)
             password_hash=bcrypt.generate_password_hash(password).decode('utf-8')
         )
         

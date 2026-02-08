@@ -807,7 +807,8 @@ class UnifiedDatasetLoader:
             results = self._search_with_filters(region, diet_type, trimester, None, None, meal_type)
             if results:
                 if log_relaxation:
-                    relaxed_filters.append('season' if season else '')
+                    if season:
+                        relaxed_filters.append('season')
                     relaxed_filters.append('condition')
                     print(f"ℹ️ Relaxed filters: {', '.join(f for f in relaxed_filters if f)}")
                 return results
@@ -817,7 +818,11 @@ class UnifiedDatasetLoader:
             results = self._search_with_filters(region, diet_type, None, None, None, meal_type)
             if results:
                 if log_relaxation:
-                    relaxed_filters = ['season', 'condition', 'trimester']
+                    if season:
+                        relaxed_filters.append('season')
+                    if condition:
+                        relaxed_filters.append('condition')
+                    relaxed_filters.append('trimester')
                     print(f"ℹ️ Relaxed filters: {', '.join(f for f in relaxed_filters if f)}")
                 return results
         
@@ -826,7 +831,13 @@ class UnifiedDatasetLoader:
             results = self._search_with_filters(region, diet_type, None, None, None, None)
             if results:
                 if log_relaxation:
-                    relaxed_filters = ['season', 'condition', 'trimester', 'meal_type']
+                    if season:
+                        relaxed_filters.append('season')
+                    if condition:
+                        relaxed_filters.append('condition')
+                    if trimester:
+                        relaxed_filters.append('trimester')
+                    relaxed_filters.append('meal_type')
                     print(f"ℹ️ Relaxed filters: {', '.join(f for f in relaxed_filters if f)}")
                 return results
         
