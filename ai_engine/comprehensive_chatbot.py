@@ -17,6 +17,9 @@ load_dotenv()
 class ComprehensiveChatbot:
     """Chatbot that can answer from all available datasets."""
     
+    # Quality thresholds for answer evaluation
+    MIN_QUALITY_ANSWER_LENGTH = 100  # Minimum characters for a quality answer
+    
     def __init__(self):
         """Initialize chatbot with unified dataset loader and multiple AI providers."""
         self.unified_loader = UnifiedDatasetLoader()
@@ -59,6 +62,28 @@ class ComprehensiveChatbot:
         print(f"✓ LangChain AI available: {self.langchain_ai.available}")
         print(f"{'='*80}\n")
 
+    def _is_poor_quality_answer(self, answer: str) -> bool:
+        """
+        Check if an answer is poor quality and should trigger fallback.
+        
+        Args:
+            answer: The answer text to evaluate
+            
+        Returns:
+            True if answer is poor quality, False otherwise
+        """
+        if not answer or len(answer.strip()) < self.MIN_QUALITY_ANSWER_LENGTH:
+            return True
+        
+        # Check for generic placeholder responses
+        if 'For specific safety information' in answer:
+            return True
+        
+        # Check for repeated generic content (indicates keyword matching failures)
+        if answer.count('**General Safety Guidelines:**') > 2:
+            return True
+        
+        return False
 
     def _rate_limit_allows(self) -> bool:
         """Simple per-process rate limit: defaults to 10 requests/minute."""
@@ -479,15 +504,8 @@ class ComprehensiveChatbot:
         if trimester:
             final_answer += f"\n\n💡 Tip: Always consult your doctor before making major dietary changes."
         
-        # Check if answer is poor quality (too short or generic)
-        is_poor_quality = (
-            len(final_answer.strip()) < 100 or
-            'For specific safety information' in final_answer or
-            final_answer.count('**General Safety Guidelines:**') > 2  # Repeated generic content
-        )
-        
         # If final answer is poor quality or empty, try multi-tier AI fallback
-        if not final_answer.strip() or is_poor_quality:
+        if self._is_poor_quality_answer(final_answer):
             if self._rate_limit_allows():
                 context = self._create_default_context(trimester, region)
                 
@@ -1129,8 +1147,8 @@ class ComprehensiveChatbot:
             cached_answer = self.answer_question(question, trimester)
             
             # Check if cached_answer is actually useful (not generic fallback)
-            # If answer is too short or generic, skip the cache and use AI
-            if len(cached_answer.strip()) < 100 or 'For specific safety information' in cached_answer:
+            # If answer is poor quality, skip the cache and use AI instead
+            if self._is_poor_quality_answer(cached_answer):
                 source = 'ai_model'  # Reset source to try AI instead
             else:
                 response_time = time.time() - start_time

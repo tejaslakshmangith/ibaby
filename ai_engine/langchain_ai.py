@@ -31,7 +31,6 @@ class LangChainNutritionAI:
         try:
             # Try importing LangChain components (modern version)
             from langchain_core.prompts import PromptTemplate
-            from langchain_core.runnables import RunnableSequence
             
             # Try multiple AI providers in order of preference
             llm_initialized = False
