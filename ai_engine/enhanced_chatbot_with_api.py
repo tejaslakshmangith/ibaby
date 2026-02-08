@@ -1,6 +1,6 @@
 """
-Enhanced AI Chatbot with External API Integration (Solar only)
-Provides fast, intelligent responses with dataset fallback and external AI enhancement
+Enhanced AI Chatbot with Gemini AI Integration
+Provides fast, intelligent responses with dataset fallback and AI enhancement
 """
 
 import os
@@ -12,7 +12,6 @@ from datetime import datetime, timedelta
 import pandas as pd
 from functools import lru_cache
 from dotenv import load_dotenv
-from openai import OpenAI
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -62,54 +61,9 @@ class ExternalAIProvider:
         raise NotImplementedError
 
 
-class SolarProvider(ExternalAIProvider):
-    """Upstage Solar provider."""
-    
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        try:
-            self.model_name = os.getenv('SOLAR_MODEL', 'solar-pro3')
-            base_url = os.getenv('UPSTAGE_BASE_URL', 'https://api.upstage.ai/v1')
-            self.client = OpenAI(api_key=api_key, base_url=base_url)
-            self.max_tokens = int(os.getenv('SOLAR_MAX_TOKENS', '800'))
-            self.available = True
-        except Exception:
-            self.available = False
-    
-    def generate_answer(self, question: str, context: str = "") -> str:
-        """Generate answer using Solar."""
-        if not self.available:
-            return ""
-        
-        try:
-            system_instruction = (
-                "You are a helpful pregnancy nutrition expert for Indian women. "
-                "Answer questions about pregnancy diet, nutrition, foods to eat or avoid during pregnancy. "
-                "Give practical, clear, and complete answers. If you don't have complete information, "
-                "provide what you know and general pregnancy nutrition guidance."
-            )
-
-            prompt = f"{system_instruction}\n\n{context}\n\nQuestion: {question}\n\nProvide a helpful, complete answer."
-
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=[
-                    {"role": "system", "content": system_instruction},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                max_tokens=self.max_tokens
-            )
-            if response and response.choices:
-                return response.choices[0].message.content or ""
-            return ""
-        except Exception:
-            return ""
-
-
 class EnhancedDosDontsChatbot:
     """
-    Enhanced chatbot with dataset + external AI (Solar-only) fallback.
+    Enhanced chatbot with dataset + Gemini AI integration.
     Fast responses with 3-second max response time.
     """
     
@@ -126,18 +80,8 @@ class EnhancedDosDontsChatbot:
         # Initialize response cache
         self.cache = ResponseCache(ttl_minutes=60)
         
-        # Initialize external AI provider (Solar only)
-        self.solar_provider = None
-        self._init_external_providers()
-        
         # Response time tracking
         self.response_times = []
-    
-    def _init_external_providers(self):
-        """Initialize external AI providers from environment (Solar only)."""
-        api_key = os.getenv('UPSTAGE_API_KEY', '').strip()
-        if api_key:
-            self.solar_provider = SolarProvider(api_key)
     
     def _load_dos_donts_dataset(self) -> pd.DataFrame:
         """Load the dos and donts dataset."""
@@ -274,19 +218,6 @@ class EnhancedDosDontsChatbot:
                     answer_lines.append(f"    ⚠️ {dont_item['notes']}")
         
         return "\n".join(answer_lines) if answer_lines else ""
-    
-    def get_external_ai_answer(self, question: str, context: str = "") -> str:
-        """Get answer from external AI fallback (Solar only)."""
-        # Solar only
-        if self.solar_provider and self.solar_provider.available:
-            try:
-                answer = self.solar_provider.generate_answer(question, context)
-                if answer:
-                    return answer
-            except Exception as e:
-                pass
-        
-        return ""
 
     def _build_ai_context(
         self,
