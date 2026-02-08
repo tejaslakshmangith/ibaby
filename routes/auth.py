@@ -20,12 +20,23 @@ def register():
     
     if request.method == 'POST':
         # Get form data
+        username = request.form.get('username', '').strip()
         email = request.form.get('email', '').strip()
         password = request.form.get('password', '')
         confirm_password = request.form.get('confirm_password', '')
         
         # Validate inputs
         errors = []
+        
+        # Username validation
+        if not username:
+            errors.append("Username is required")
+        else:
+            is_valid, msg = validate_username(username)
+            if not is_valid:
+                errors.append(msg)
+            elif User.query.filter_by(username=username).first():
+                errors.append("Username already taken")
         
         # Email validation
         if not validate_email(email):
@@ -48,7 +59,9 @@ def register():
         
         # Create user
         user = User(
+            username=username,
             email=email,
+            full_name=username,  # Use username as default display name
             password_hash=bcrypt.generate_password_hash(password).decode('utf-8')
         )
         

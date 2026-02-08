@@ -651,6 +651,7 @@
                                 {% if session.get('language') == 'te' %}భోజనాల సంఖ్య{% else %}Meals Per Day{% endif %}
                             </label>
                             <select class="form-select-modern" id="meal-frequency" required>
+                                <option value="">{% if session.get('language') == 'te' %}రోజుకు భోజనాలు ఎంచుకోండి{% else %}Select Meals Per Day{% endif %}</option>
                                 <option value="3meals">{% if session.get('language') == 'te' %}3 భోజనాలు{% else %}3 Meals{% endif %}</option>
                                 <option value="5meals">{% if session.get('language') == 'te' %}5 భోజనాలు{% else %}5 Meals (with snacks){% endif %}</option>
                             </select>
@@ -897,6 +898,11 @@
 
         if (!dietType) {
             alert('Please select a diet type');
+            return;
+        }
+
+        if (!mealFrequency) {
+            alert('Please select meals per day');
             return;
         }
 
