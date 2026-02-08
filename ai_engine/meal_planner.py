@@ -1,16 +1,17 @@
-"""AI-Powered Meal Plan Generator using Unified Dataset Integration."""
+"""AI-Powered Meal Plan Generator using Unified Dataset Integration and Gemini AI."""
 import random
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from ai_engine.unified_dataset_loader import UnifiedDatasetLoader
+from ai_engine.gemini_integration import GeminiNutritionAI
 
 
 class MealPlanner:
-    """Generate personalized meal plans for pregnant women using comprehensive datasets."""
+    """Generate personalized meal plans for pregnant women using comprehensive datasets and AI."""
     
     def __init__(self, db, unified_loader: Optional[UnifiedDatasetLoader] = None):
         """
-        Initialize the meal planner with unified dataset integration.
+        Initialize the meal planner with unified dataset integration and AI support.
         
         Args:
             db: Database instance
@@ -18,6 +19,7 @@ class MealPlanner:
         """
         self.db = db
         self.unified_loader = unified_loader or UnifiedDatasetLoader()
+        self.gemini_ai = GeminiNutritionAI()
         self.meal_types = ['breakfast', 'mid_morning_snack', 'lunch', 'evening_snack', 'dinner']
     
     def generate_meal_plan(
@@ -27,7 +29,6 @@ class MealPlanner:
         region: Optional[str] = None,
         diet_type: Optional[str] = None,
         trimester: Optional[int] = None,
-        season: Optional[str] = None,
         special_conditions: Optional[List[str]] = None,
         meal_frequency: str = '3meals'
     ) -> Dict:
@@ -40,7 +41,6 @@ class MealPlanner:
             region: Regional preference (required)
             diet_type: Diet type - 'veg', 'nonveg', 'vegan' (required)
             trimester: Pregnancy trimester 1-3 (required)
-            season: Seasonal preference - 'summer', 'winter', 'monsoon' (optional)
             special_conditions: List of conditions like 'diabetes', 'gestational_diabetes'
             meal_frequency: '3meals' (breakfast, lunch, dinner) or '5meals' (add snacks)
         
@@ -54,7 +54,7 @@ class MealPlanner:
             }
         """
         try:
-            # Validate required preferences (season is optional)
+            # Validate required preferences
             if not all([region, diet_type, trimester]):
                 return {
                     'error': 'Required preferences: region, diet_type, trimester'
@@ -63,8 +63,6 @@ class MealPlanner:
             # Normalize inputs
             region = self._normalize_region(region)
             diet_type = self._normalize_diet(diet_type)
-            if season:
-                season = self._normalize_season(season)
             
             # Determine which meal types to generate
             if meal_frequency == '5meals':
@@ -86,7 +84,15 @@ class MealPlanner:
                 'fiber': 0,
                 'iron': 0,
                 'calcium': 0,
-                'folic_acid': 0
+                'folic_acid': 0,
+                'vitamin_a': 0,
+                'vitamin_b6': 0,
+                'vitamin_b12': 0,
+                'vitamin_c': 0,
+                'vitamin_d': 0,
+                'zinc': 0,
+                'magnesium': 0,
+                'omega3': 0
             }
             
             for day in range(1, days + 1):
@@ -97,7 +103,6 @@ class MealPlanner:
                     region=region,
                     diet_type=diet_type,
                     trimester=trimester,
-                    season=season,
                     special_conditions=special_conditions or [],
                     data_sources_used=data_sources_used,
                     used_meals_tracker=used_meals_tracker
@@ -122,6 +127,20 @@ class MealPlanner:
                 meal_frequency
             )
             
+            # Check if AI enhancement is available and add recommendations
+            ai_enhanced = False
+            if self.gemini_ai.available:
+                # Use AI to validate nutrition and provide recommendations
+                ai_nutrition = self.gemini_ai.calculate_advanced_nutrition(
+                    [day['meals'] for day in meal_plan if 'meals' in day]
+                )
+                if ai_nutrition:
+                    ai_enhanced = True
+                    # Merge AI nutrition data if more comprehensive
+                    for nutrient, value in ai_nutrition.items():
+                        if nutrient not in nutrition_totals or nutrition_totals[nutrient] == 0:
+                            nutrition_totals[nutrient] = value
+            
             # Format for table display
             table_format = self._format_meal_plan_table(meal_plan)
             
@@ -130,11 +149,11 @@ class MealPlanner:
                 'nutrition_summary': nutrition_summary,
                 'table_format': table_format,
                 'data_sources_used': list(data_sources_used),
+                'ai_enhanced': ai_enhanced,
                 'preferences': {
                     'region': region,
                     'diet_type': diet_type,
                     'trimester': trimester,
-                    'season': season,
                     'special_conditions': special_conditions,
                     'meal_frequency': meal_frequency
                 }
@@ -152,7 +171,6 @@ class MealPlanner:
         region: str,
         diet_type: str,
         trimester: int,
-        season: Optional[str],
         special_conditions: List[str],
         data_sources_used: set,
         used_meals_tracker: Dict[str, set]
@@ -172,7 +190,6 @@ class MealPlanner:
                     region=region,
                     diet_type=diet_type,
                     trimester=trimester,
-                    season=season,
                     special_conditions=special_conditions
                 )
                 
@@ -245,7 +262,6 @@ class MealPlanner:
         region: str,
         diet_type: str,
         trimester: int,
-        season: Optional[str],
         special_conditions: List[str]
     ) -> List[Dict]:
         """Get suitable meals for specific meal type with all preferences."""
@@ -253,43 +269,23 @@ class MealPlanner:
         # Try to get meals matching all preferences (including condition if applicable)
         condition = special_conditions[0] if special_conditions else None
         
-        # Try with all parameters if season is provided
-        if season:
-            meals = self.unified_loader.get_meals_by_preference(
-                region=region,
-                diet_type=diet_type,
-                trimester=trimester,
-                season=season,
-                condition=condition,
-                meal_type=meal_type
-            )
-        else:
-            # Try without season
-            meals = self.unified_loader.get_meals_by_preference(
-                region=region,
-                diet_type=diet_type,
-                trimester=trimester,
-                condition=condition,
-                meal_type=meal_type
-            )
+        # Try without season (season parameter removed)
+        meals = self.unified_loader.get_meals_by_preference(
+            region=region,
+            diet_type=diet_type,
+            trimester=trimester,
+            condition=condition,
+            meal_type=meal_type
+        )
         
         # If no exact match, try without condition
         if not meals and condition:
-            if season:
-                meals = self.unified_loader.get_meals_by_preference(
-                    region=region,
-                    diet_type=diet_type,
-                    trimester=trimester,
-                    season=season,
-                    meal_type=meal_type
-                )
-            else:
-                meals = self.unified_loader.get_meals_by_preference(
-                    region=region,
-                    diet_type=diet_type,
-                    trimester=trimester,
-                    meal_type=meal_type
-                )
+            meals = self.unified_loader.get_meals_by_preference(
+                region=region,
+                diet_type=diet_type,
+                trimester=trimester,
+                meal_type=meal_type
+            )
         
         # If still no match, try without trimester
         if not meals:
@@ -309,7 +305,7 @@ class MealPlanner:
         return meals
     
     def _calculate_day_nutrition(self, meals: Dict[str, Dict]) -> Dict[str, float]:
-        """Calculate nutrition values for all meals in a day."""
+        """Calculate nutrition values for all meals in a day with comprehensive nutrients."""
         nutrition = {
             'calories': 0,
             'protein': 0,
@@ -318,7 +314,15 @@ class MealPlanner:
             'fiber': 0,
             'iron': 0,
             'calcium': 0,
-            'folic_acid': 0
+            'folic_acid': 0,
+            'vitamin_a': 0,
+            'vitamin_b6': 0,
+            'vitamin_b12': 0,
+            'vitamin_c': 0,
+            'vitamin_d': 0,
+            'zinc': 0,
+            'magnesium': 0,
+            'omega3': 0
         }
         
         for meal_type, meal in meals.items():
@@ -331,31 +335,61 @@ class MealPlanner:
         return nutrition
     
     def _get_pregnancy_nutrition_targets(self, trimester: int) -> Dict[str, Dict]:
-        """Get recommended nutrition targets by trimester."""
+        """Get recommended nutrition targets by trimester with comprehensive nutrients."""
         targets = {
             1: {
                 'calories': {'daily': 2000, 'unit': 'kcal'},
                 'protein': {'daily': 50, 'unit': 'g'},
+                'carbs': {'daily': 175, 'unit': 'g'},
+                'fat': {'daily': 70, 'unit': 'g'},
+                'fiber': {'daily': 25, 'unit': 'g'},
                 'calcium': {'daily': 1000, 'unit': 'mg'},
                 'iron': {'daily': 27, 'unit': 'mg'},
                 'folic_acid': {'daily': 600, 'unit': 'mcg'},
-                'fiber': {'daily': 25, 'unit': 'g'}
+                'vitamin_a': {'daily': 770, 'unit': 'mcg'},
+                'vitamin_b6': {'daily': 1.9, 'unit': 'mg'},
+                'vitamin_b12': {'daily': 2.6, 'unit': 'mcg'},
+                'vitamin_c': {'daily': 85, 'unit': 'mg'},
+                'vitamin_d': {'daily': 15, 'unit': 'mcg'},
+                'zinc': {'daily': 11, 'unit': 'mg'},
+                'magnesium': {'daily': 350, 'unit': 'mg'},
+                'omega3': {'daily': 300, 'unit': 'mg'}
             },
             2: {
                 'calories': {'daily': 2300, 'unit': 'kcal'},
                 'protein': {'daily': 60, 'unit': 'g'},
+                'carbs': {'daily': 175, 'unit': 'g'},
+                'fat': {'daily': 70, 'unit': 'g'},
+                'fiber': {'daily': 25, 'unit': 'g'},
                 'calcium': {'daily': 1000, 'unit': 'mg'},
                 'iron': {'daily': 27, 'unit': 'mg'},
                 'folic_acid': {'daily': 600, 'unit': 'mcg'},
-                'fiber': {'daily': 25, 'unit': 'g'}
+                'vitamin_a': {'daily': 770, 'unit': 'mcg'},
+                'vitamin_b6': {'daily': 1.9, 'unit': 'mg'},
+                'vitamin_b12': {'daily': 2.6, 'unit': 'mcg'},
+                'vitamin_c': {'daily': 85, 'unit': 'mg'},
+                'vitamin_d': {'daily': 15, 'unit': 'mcg'},
+                'zinc': {'daily': 11, 'unit': 'mg'},
+                'magnesium': {'daily': 360, 'unit': 'mg'},
+                'omega3': {'daily': 300, 'unit': 'mg'}
             },
             3: {
                 'calories': {'daily': 2600, 'unit': 'kcal'},
                 'protein': {'daily': 70, 'unit': 'g'},
+                'carbs': {'daily': 175, 'unit': 'g'},
+                'fat': {'daily': 70, 'unit': 'g'},
+                'fiber': {'daily': 25, 'unit': 'g'},
                 'calcium': {'daily': 1000, 'unit': 'mg'},
                 'iron': {'daily': 27, 'unit': 'mg'},
                 'folic_acid': {'daily': 600, 'unit': 'mcg'},
-                'fiber': {'daily': 25, 'unit': 'g'}
+                'vitamin_a': {'daily': 770, 'unit': 'mcg'},
+                'vitamin_b6': {'daily': 1.9, 'unit': 'mg'},
+                'vitamin_b12': {'daily': 2.6, 'unit': 'mcg'},
+                'vitamin_c': {'daily': 85, 'unit': 'mg'},
+                'vitamin_d': {'daily': 15, 'unit': 'mcg'},
+                'zinc': {'daily': 11, 'unit': 'mg'},
+                'magnesium': {'daily': 360, 'unit': 'mg'},
+                'omega3': {'daily': 300, 'unit': 'mg'}
             }
         }
         
@@ -476,16 +510,4 @@ class MealPlanner:
             return 'nonveg'
         if 'vegan' in value:
             return 'vegan'
-        return value
-
-    def _normalize_season(self, season: Optional[str]) -> Optional[str]:
-        if not season:
-            return None
-        value = season.strip().lower()
-        if 'summer' in value:
-            return 'summer'
-        if 'winter' in value:
-            return 'winter'
-        if 'monsoon' in value or 'rain' in value:
-            return 'monsoon'
         return value

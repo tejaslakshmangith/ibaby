@@ -49,8 +49,6 @@ def validate_preferences():
         # Update user preferences
         if data.get('region_preference'):
             current_user.region_preference = data['region_preference']
-        if data.get('seasonal_preference'):
-            current_user.seasonal_preference = data['seasonal_preference']
         if data.get('dietary_preferences'):
             current_user.dietary_preferences = data['dietary_preferences']
         if data.get('current_trimester'):
@@ -75,7 +73,6 @@ def validate_preferences():
                 region=current_user.region_preference,
                 diet_type=current_user.dietary_preferences,
                 trimester=current_user.current_trimester,
-                season=current_user.seasonal_preference,
                 condition=current_user.get_special_conditions()[0] if current_user.get_special_conditions() else None
             )
             
@@ -177,8 +174,6 @@ def generate_meal_plan():
             current_user.region_preference = data['region']
         if data.get('diet_type'):
             current_user.dietary_preferences = data['diet_type']
-        if data.get('season'):
-            current_user.seasonal_preference = data['season']
         
         # Ensure trimester is set
         if not current_user.current_trimester or current_user.current_trimester <= 0:
@@ -223,7 +218,6 @@ def generate_meal_plan():
             region=current_user.region_preference,
             diet_type=current_user.dietary_preferences,
             trimester=current_user.current_trimester,
-            season=current_user.seasonal_preference,
             special_conditions=current_user.get_special_conditions(),
             meal_frequency=meal_frequency
         )

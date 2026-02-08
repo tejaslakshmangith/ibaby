@@ -1,10 +1,11 @@
-"""Comprehensive Chatbot with Access to ALL Datasets + Solar Pro 3 fallback."""
+"""Comprehensive Chatbot with Access to ALL Datasets + Solar Pro 3 + Gemini AI fallback."""
 import pandas as pd
 from typing import Dict, List, Optional
 import os
 import json
 from collections import deque
 from ai_engine.unified_dataset_loader import UnifiedDatasetLoader
+from ai_engine.gemini_integration import GeminiNutritionAI
 from dotenv import load_dotenv
 import time
 from openai import OpenAI
@@ -17,7 +18,7 @@ class ComprehensiveChatbot:
     """Chatbot that can answer from all available datasets."""
     
     def __init__(self):
-        """Initialize chatbot with unified dataset loader and Solar Pro 3 fallback."""
+        """Initialize chatbot with unified dataset loader, Solar Pro 3, and Gemini AI fallback."""
         self.unified_loader = UnifiedDatasetLoader()
         self.datasets = {}
         self.knowledge_base = {}
@@ -36,7 +37,10 @@ class ComprehensiveChatbot:
         self._response_cache = {}
         self._cache_ttl = int(os.getenv('CACHE_TTL_SECONDS', '3600'))  # 1 hour default
         
-        # Initialize Solar Pro 3 as the only external provider
+        # Initialize Gemini AI (free tier)
+        self.gemini_ai = GeminiNutritionAI()
+        
+        # Initialize Solar Pro 3 as the primary external provider
         self.solar_available = False
         self.solar_api_key = None
         self.solar_model_name = None
@@ -57,6 +61,7 @@ class ComprehensiveChatbot:
         print(f"✓ Using UnifiedDatasetLoader with {len(self.unified_loader.meals)} total meals")
         print(f"✓ Response caching enabled (TTL: {self._cache_ttl}s)")
         print(f"✓ AI timeout: {self.ai_timeout}s")
+        print(f"✓ Gemini AI available: {self.gemini_ai.available}")
         print(f"{'='*80}\n")
 
     def _init_solar(self):
@@ -504,10 +509,22 @@ class ComprehensiveChatbot:
             answer_parts = self._handle_general_question(keywords, trimester)
         
         if not answer_parts:
+            # Try AI fallback: Solar first, then Gemini
             if self._rate_limit_allows():
                 solar_ans = self._ask_solar(question)
                 if solar_ans:
                     return f"🤖 **AI-Powered Answer (Solar):**\n\n{solar_ans}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
+            
+            # If Solar unavailable or failed, try Gemini
+            context = {
+                'trimester': trimester,
+                'region': region,
+                'diet_type': 'general'
+            }
+            gemini_ans = self.gemini_ai.enhance_chatbot_response(question, context)
+            if gemini_ans:
+                return f"🤖 **AI-Powered Answer (Gemini):**\n\n{gemini_ans}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
+            
             return self._get_general_answer(intent, trimester)
         
         final_answer = '\n'.join(answer_parts)
@@ -516,12 +533,23 @@ class ComprehensiveChatbot:
         if trimester:
             final_answer += f"\n\n💡 Tip: Always consult your doctor before making major dietary changes."
         
-        # If final answer is still empty, try Solar fallback
+        # If final answer is still empty, try AI fallback (Solar → Gemini)
         if not final_answer.strip():
             if self._rate_limit_allows():
                 solar_ans = self._ask_solar(question)
                 if solar_ans:
                     return f"🤖 **AI-Powered Answer (Solar):**\n\n{solar_ans}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
+            
+            # Gemini fallback
+            context = {
+                'trimester': trimester,
+                'region': region,
+                'diet_type': 'general'
+            }
+            gemini_ans = self.gemini_ai.enhance_chatbot_response(question, context)
+            if gemini_ans:
+                return f"🤖 **AI-Powered Answer (Gemini):**\n\n{gemini_ans}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
+            
             return self._get_general_answer(intent, trimester)
         
         return final_answer
