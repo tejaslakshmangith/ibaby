@@ -33,7 +33,7 @@ def chatbot_page():
 def ask_question():
     """
     Answer user questions with FAST responses (< 3 seconds).
-    Uses dataset + external AI (Solar-only) fallback.
+    Uses dataset + Gemini AI fallback.
     
     Expects JSON:
         {
@@ -65,7 +65,7 @@ def ask_question():
         region = data.get('region')
         season = data.get('season')
         
-        # Get comprehensive chatbot with all datasets + Solar fallback
+        # Get comprehensive chatbot with all datasets + Gemini AI fallback
         chatbot = get_comprehensive_chatbot()
 
         # Use structured answer to include dos/donts and intent metadata

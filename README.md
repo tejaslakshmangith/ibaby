@@ -27,9 +27,8 @@ Each nutrient shows:
 ### 3. AI-Enhanced Chatbot
 Multi-tier intelligent chatbot with fallback logic:
 1. **Dataset Search** - Answers from comprehensive pregnancy nutrition datasets
-2. **Solar AI** - Advanced AI model for complex questions (if configured)
-3. **Gemini AI** - Google's Gemini Pro for contextual responses (if configured)
-4. **General Guidance** - Safe fallback responses
+2. **Gemini AI** - Google's Gemini Pro for contextual responses (if configured)
+3. **General Guidance** - Safe fallback responses
 
 Features:
 - Context-aware responses (trimester, region, diet type)
@@ -88,10 +87,6 @@ GEMINI_API_KEY=your-gemini-api-key-here
 
 # Alternative: Use GOOGLE_API_KEY instead
 GOOGLE_API_KEY=your-google-api-key-here
-
-# Upstage Solar Pro 3 API (Optional)
-UPSTAGE_API_KEY=your-upstage-api-key-here
-SOLAR_MODEL=solar-pro3
 ```
 
 ### Flask Configuration
@@ -103,9 +98,6 @@ DATABASE_URL=sqlite:///instance/database.db
 
 ### AI Configuration (Advanced)
 ```env
-# Maximum tokens for AI responses (default: 300)
-SOLAR_MAX_TOKENS=300
-
 # AI request timeout in seconds (default: 2.5)
 AI_TIMEOUT_SECONDS=2.5
 
@@ -157,12 +149,6 @@ The chatbot provides:
 - 60 requests per minute
 - Rate limiting built-in
 - Graceful degradation if unavailable
-
-### Upstage Solar Pro 3 (Optional)
-Premium AI model for enhanced responses:
-1. Get API key from [Upstage Console](https://console.upstage.ai/)
-2. Add to `.env`: `UPSTAGE_API_KEY=your-key-here`
-3. Restart the application
 
 ## 🧪 Testing
 
@@ -250,7 +236,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## 🙏 Acknowledgments
 
 - Google Gemini AI for free-tier AI capabilities
-- Upstage Solar for advanced AI models
 - Pregnancy nutrition datasets from various open sources
 - Flask framework and community
 

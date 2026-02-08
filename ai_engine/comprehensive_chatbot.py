@@ -1,4 +1,4 @@
-"""Comprehensive Chatbot with Access to ALL Datasets + Solar Pro 3 + Gemini AI fallback."""
+"""Comprehensive Chatbot with Access to ALL Datasets + Gemini AI."""
 import pandas as pd
 from typing import Dict, List, Optional
 import os
@@ -18,13 +18,10 @@ class ComprehensiveChatbot:
     """Chatbot that can answer from all available datasets."""
     
     def __init__(self):
-        """Initialize chatbot with unified dataset loader, Solar Pro 3, and Gemini AI fallback."""
+        """Initialize chatbot with unified dataset loader and Gemini AI."""
         self.unified_loader = UnifiedDatasetLoader()
         self.datasets = {}
         self.knowledge_base = {}
-
-        # Configurable token budgets (default capped to 300 to conserve quota)
-        self.solar_max_tokens = int(os.getenv('SOLAR_MAX_TOKENS', '300'))
         
         # AI model timeout (default 2.5 seconds to ensure <3s total response time)
         self.ai_timeout = float(os.getenv('AI_TIMEOUT_SECONDS', '2.5'))
@@ -37,15 +34,8 @@ class ComprehensiveChatbot:
         self._response_cache = {}
         self._cache_ttl = int(os.getenv('CACHE_TTL_SECONDS', '3600'))  # 1 hour default
         
-        # Initialize Gemini AI (free tier)
+        # Initialize Gemini AI as the primary AI provider
         self.gemini_ai = GeminiNutritionAI()
-        
-        # Initialize Solar Pro 3 as the primary external provider
-        self.solar_available = False
-        self.solar_api_key = None
-        self.solar_model_name = None
-        self.solar_client = None
-        self._init_solar()
         
         # Load all datasets through unified loader
         self._load_all_datasets()
@@ -64,84 +54,6 @@ class ComprehensiveChatbot:
         print(f"✓ Gemini AI available: {self.gemini_ai.available}")
         print(f"{'='*80}\n")
 
-    def _init_solar(self):
-        """Initialize Solar Pro 3 via the Upstage Solar Chat API."""
-        try:
-            api_key = os.getenv('UPSTAGE_API_KEY')
-            if not api_key:
-                print("ℹ UPSTAGE_API_KEY not found; Solar fallback disabled")
-                return
-
-            self.solar_api_key = api_key
-            self.solar_model_name = os.getenv('SOLAR_MODEL', 'solar-pro3')
-            base_url = os.getenv('UPSTAGE_BASE_URL', 'https://api.upstage.ai/v1')
-            self.solar_client = OpenAI(api_key=self.solar_api_key, base_url=base_url)
-            self.solar_available = True
-            print(f"✓ Solar model configured: {self.solar_model_name}")
-        except Exception as e:
-            print(f"⚠ Solar API initialization failed: {e}")
-            self.solar_available = False
-    
-
-    def _ask_solar(self, prompt: str) -> str:
-        """Use Solar Pro 3 as the sole external model with timeout handling."""
-        if not self.solar_available or not self.solar_api_key or not self.solar_model_name or not self.solar_client:
-            return ""
-        try:
-            import signal
-            
-            # Define timeout handler
-            def timeout_handler(signum, frame):
-                raise TimeoutError("AI model request timed out")
-            
-            # Set timeout alarm (Unix only, fallback to no timeout on Windows)
-            try:
-                signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(int(self.ai_timeout))
-            except (AttributeError, ValueError):
-                # Windows doesn't support SIGALRM, continue without timeout
-                pass
-            
-            try:
-                response = self.solar_client.chat.completions.create(
-                    model=self.solar_model_name,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": (
-                                "You are a pregnancy nutrition assistant. Provide concise, non-diagnostic guidance. "
-                                "Keep responses brief and practical. Include a short medical disclaimer."
-                            )
-                        },
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.7,
-                    max_tokens=self.solar_max_tokens,
-                    timeout=self.ai_timeout  # Client-side timeout
-                )
-                
-                # Cancel alarm if set
-                try:
-                    signal.alarm(0)
-                except AttributeError:
-                    pass
-                
-                if response and response.choices:
-                    content = response.choices[0].message.content or ""
-                    return content.strip()
-                return ""
-            except TimeoutError:
-                print(f"⚠ Solar API timeout after {self.ai_timeout}s")
-                return ""
-        except Exception as e:
-            print(f"⚠ Solar API error: {e}")
-            return ""
-        finally:
-            # Ensure alarm is cancelled
-            try:
-                signal.alarm(0)
-            except (AttributeError, NameError):
-                pass
 
     def _rate_limit_allows(self) -> bool:
         """Simple per-process rate limit: defaults to 10 requests/minute."""
@@ -509,21 +421,16 @@ class ComprehensiveChatbot:
             answer_parts = self._handle_general_question(keywords, trimester)
         
         if not answer_parts:
-            # Try AI fallback: Solar first, then Gemini
+            # Try AI fallback with Gemini
             if self._rate_limit_allows():
-                solar_ans = self._ask_solar(question)
-                if solar_ans:
-                    return f"🤖 **AI-Powered Answer (Solar):**\n\n{solar_ans}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
-            
-            # If Solar unavailable or failed, try Gemini
-            context = {
-                'trimester': trimester,
-                'region': region,
-                'diet_type': 'general'
-            }
-            gemini_ans = self.gemini_ai.enhance_chatbot_response(question, context)
-            if gemini_ans:
-                return f"🤖 **AI-Powered Answer (Gemini):**\n\n{gemini_ans}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
+                context = {
+                    'trimester': trimester,
+                    'region': region,
+                    'diet_type': 'general'
+                }
+                gemini_ans = self.gemini_ai.enhance_chatbot_response(question, context)
+                if gemini_ans:
+                    return f"🤖 **AI-Powered Answer:**\n\n{gemini_ans}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
             
             return self._get_general_answer(intent, trimester)
         
@@ -533,22 +440,17 @@ class ComprehensiveChatbot:
         if trimester:
             final_answer += f"\n\n💡 Tip: Always consult your doctor before making major dietary changes."
         
-        # If final answer is still empty, try AI fallback (Solar → Gemini)
+        # If final answer is still empty, try Gemini AI fallback
         if not final_answer.strip():
             if self._rate_limit_allows():
-                solar_ans = self._ask_solar(question)
-                if solar_ans:
-                    return f"🤖 **AI-Powered Answer (Solar):**\n\n{solar_ans}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
-            
-            # Gemini fallback
-            context = {
-                'trimester': trimester,
-                'region': region,
-                'diet_type': 'general'
-            }
-            gemini_ans = self.gemini_ai.enhance_chatbot_response(question, context)
-            if gemini_ans:
-                return f"🤖 **AI-Powered Answer (Gemini):**\n\n{gemini_ans}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
+                context = {
+                    'trimester': trimester,
+                    'region': region,
+                    'diet_type': 'general'
+                }
+                gemini_ans = self.gemini_ai.enhance_chatbot_response(question, context)
+                if gemini_ans:
+                    return f"🤖 **AI-Powered Answer:**\n\n{gemini_ans}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
             
             return self._get_general_answer(intent, trimester)
         
@@ -687,11 +589,17 @@ class ComprehensiveChatbot:
                 "   • Variety is key\n"
             )
         
-        # Try Solar for unknown foods
+        # Try Gemini AI for unknown foods
         else:
-            solar_ans = self._ask_solar(f"Is {food} safe to eat during pregnancy? What are the benefits and risks?")
-            if solar_ans:
-                return f"**{food.title()}:**\n✅ AI Response (Solar):\n{solar_ans}\n"
+            if self._rate_limit_allows():
+                context = {
+                    'trimester': None,
+                    'region': None,
+                    'diet_type': 'general'
+                }
+                gemini_ans = self.gemini_ai.enhance_chatbot_response(f"Is {food} safe to eat during pregnancy? What are the benefits and risks?", context)
+                if gemini_ans:
+                    return f"**{food.title()}:**\n✅ AI Response:\n{gemini_ans}\n"
 
             return (
                 f"**{food.title()}:**\n"
@@ -868,12 +776,17 @@ class ComprehensiveChatbot:
                 if info.get('remarks'):
                     answer_parts.append(f"  💡 Note: {info['remarks']}")
                 answer_parts.append("")  # Blank line
-            else:
-                solar_ans = self._ask_solar(f"What are the nutritional benefits and risks of eating {keyword} during pregnancy?")
-                if solar_ans:
+            elif self._rate_limit_allows():
+                context = {
+                    'trimester': None,
+                    'region': None,
+                    'diet_type': 'general'
+                }
+                gemini_ans = self.gemini_ai.enhance_chatbot_response(f"What are the nutritional benefits and risks of eating {keyword} during pregnancy?", context)
+                if gemini_ans:
                     found_any = True
-                    answer_parts.append(f"\n**{keyword.title()} (AI-Powered, Solar):**")
-                    answer_parts.append(f"{solar_ans}")
+                    answer_parts.append(f"\n**{keyword.title()} (AI-Powered):**")
+                    answer_parts.append(f"{gemini_ans}")
                     answer_parts.append("")
         
         if not found_any:
@@ -902,13 +815,18 @@ class ComprehensiveChatbot:
                 answer_parts.append(f"  Nutrients: {info.get('nutrients', 'Various minerals and vitamins')}")
                 answer_parts.append(f"  Benefit: {info.get('benefit', 'Supports pregnancy health')}\n")
         
-        # If no food found in database, try Solar for each keyword
-        if not found_any and keywords:
+        # If no food found in database, try Gemini AI for each keyword
+        if not found_any and keywords and self._rate_limit_allows():
             for keyword in keywords[:3]:  # Limit to first 3 keywords
-                solar_info = self._ask_solar(f"Tell me about {keyword} during pregnancy - is it safe? What are the benefits?")
-                if solar_info:
-                    answer_parts.append(f"🤖 **{keyword.title()}** (AI-Powered, Solar):")
-                    answer_parts.append(solar_info)
+                context = {
+                    'trimester': None,
+                    'region': None,
+                    'diet_type': 'general'
+                }
+                gemini_info = self.gemini_ai.enhance_chatbot_response(f"Tell me about {keyword} during pregnancy - is it safe? What are the benefits?", context)
+                if gemini_info:
+                    answer_parts.append(f"🤖 **{keyword.title()}** (AI-Powered):")
+                    answer_parts.append(gemini_info)
                     answer_parts.append("")
         
         return answer_parts
