@@ -194,6 +194,10 @@ class MealPlanner:
                 )
                 
                 if meals:
+                    # Apply strict vegetarian filter if diet_type is 'veg'
+                    if diet_type == 'veg':
+                        meals = [m for m in meals if self._is_strictly_vegetarian(m)]
+                    
                     # Filter out recently used meals for variety (for multi-day plans)
                     available_meals = [m for m in meals if self._get_meal_id(m) not in used_meals_tracker[meal_type]]
                     
@@ -202,7 +206,34 @@ class MealPlanner:
                         used_meals_tracker[meal_type].clear()
                         available_meals = meals
                     
-                    selected_meal = random.choice(available_meals)
+                    # Use nutritional scoring to select best meal (if we have nutrition targets)
+                    current_day_nutrition = self._calculate_day_nutrition(day_meals.get('meals', {}))
+                    target_nutrition = self._get_pregnancy_nutrition_targets(trimester)
+                    
+                    # Score each available meal and select the one with best nutrition score
+                    if available_meals:
+                        meal_scores = []
+                        for meal in available_meals:
+                            nutrition_score = self._score_meal_nutrition(meal, current_day_nutrition, target_nutrition, trimester)
+                            variety_score = 100.0  # Start with full variety score
+                            
+                            # Penalize meals similar to already selected meals today
+                            for existing_meal_type, existing_meal in day_meals.get('meals', {}).items():
+                                similarity = self._calculate_meal_similarity(meal, existing_meal)
+                                variety_score -= similarity * 50  # Reduce score by up to 50 points
+                            
+                            # Combined score (70% nutrition, 30% variety)
+                            total_score = (nutrition_score * 0.7) + (max(0, variety_score) * 0.3)
+                            meal_scores.append((meal, total_score))
+                        
+                        # Sort by score and pick from top 3 to add some randomness
+                        meal_scores.sort(key=lambda x: x[1], reverse=True)
+                        top_meals = meal_scores[:min(3, len(meal_scores))]
+                        selected_meal = random.choice(top_meals)[0] if top_meals else available_meals[0]
+                    else:
+                        # No meals available after filtering
+                        return {'error': f'No suitable {meal_type} meals available after filtering'}
+                    
                     day_meals['meals'][meal_type] = selected_meal
                     
                     # Track this meal to avoid immediate repetition
@@ -335,10 +366,16 @@ class MealPlanner:
         return nutrition
     
     def _get_pregnancy_nutrition_targets(self, trimester: int) -> Dict[str, Dict]:
-        """Get recommended nutrition targets by trimester with comprehensive nutrients."""
+        """Get recommended nutrition targets by trimester with comprehensive nutrients.
+        
+        Calorie targets based on pregnancy requirements:
+        - T1: 1800 kcal (base + 0 extra, focus on quality over quantity)
+        - T2: 2200 kcal (base + 300-400 extra for fetal growth)
+        - T3: 2400 kcal (base + 450-500 extra for final development)
+        """
         targets = {
             1: {
-                'calories': {'daily': 2000, 'unit': 'kcal'},
+                'calories': {'daily': 1800, 'unit': 'kcal'},
                 'protein': {'daily': 50, 'unit': 'g'},
                 'carbs': {'daily': 175, 'unit': 'g'},
                 'fat': {'daily': 70, 'unit': 'g'},
@@ -356,7 +393,7 @@ class MealPlanner:
                 'omega3': {'daily': 300, 'unit': 'mg'}
             },
             2: {
-                'calories': {'daily': 2300, 'unit': 'kcal'},
+                'calories': {'daily': 2200, 'unit': 'kcal'},
                 'protein': {'daily': 60, 'unit': 'g'},
                 'carbs': {'daily': 175, 'unit': 'g'},
                 'fat': {'daily': 70, 'unit': 'g'},
@@ -374,7 +411,7 @@ class MealPlanner:
                 'omega3': {'daily': 300, 'unit': 'mg'}
             },
             3: {
-                'calories': {'daily': 2600, 'unit': 'kcal'},
+                'calories': {'daily': 2400, 'unit': 'kcal'},
                 'protein': {'daily': 70, 'unit': 'g'},
                 'carbs': {'daily': 175, 'unit': 'g'},
                 'fat': {'daily': 70, 'unit': 'g'},
@@ -489,6 +526,115 @@ class MealPlanner:
             formatted.append(row)
         
         return formatted
+
+    def _score_meal_nutrition(self, meal: Dict, current_day_nutrition: Dict, target_nutrition: Dict, trimester: int) -> float:
+        """
+        Score a meal based on how well it fills nutritional gaps for the day.
+        
+        Args:
+            meal: The meal to score
+            current_day_nutrition: Current nutrition totals for the day
+            target_nutrition: Target nutrition for the day
+            trimester: Current trimester
+            
+        Returns:
+            float: Nutrition score (higher is better, 0-100)
+        """
+        score = 0.0
+        
+        # Get meal's nutrition data
+        meal_name = self._get_meal_id(meal)
+        meal_nutrition = self.unified_loader.get_nutritional_data(meal_name)
+        
+        if not meal_nutrition:
+            return 50.0  # Default moderate score if no nutrition data
+        
+        # Weight factors for different nutrients (higher = more important for pregnancy)
+        nutrient_weights = {
+            'calories': 1.0,
+            'protein': 2.0,  # Very important
+            'iron': 3.0,  # Critical for pregnancy
+            'calcium': 2.5,  # Critical for pregnancy
+            'folic_acid': 3.0,  # Critical especially T1
+            'fiber': 1.5,
+            'vitamin_a': 1.5,
+            'vitamin_c': 1.5
+        }
+        
+        # Calculate how much this meal helps fill gaps
+        for nutrient in ['calories', 'protein', 'iron', 'calcium', 'folic_acid', 'fiber']:
+            if nutrient in target_nutrition:
+                target = target_nutrition[nutrient]['daily']
+                current = current_day_nutrition.get(nutrient, 0)
+                gap = max(0, target - current)  # How much we still need
+                
+                if gap > 0:
+                    # How much of the gap does this meal fill?
+                    meal_contributes = meal_nutrition.get(nutrient, 0)
+                    gap_filled_pct = min(100, (meal_contributes / gap) * 100) if gap > 0 else 0
+                    
+                    # Weight by importance
+                    weight = nutrient_weights.get(nutrient, 1.0)
+                    score += gap_filled_pct * weight
+        
+        # Normalize score to 0-100 range
+        max_possible_score = sum(nutrient_weights.values()) * 100
+        normalized_score = min(100, (score / max_possible_score) * 100)
+        
+        return normalized_score
+    
+    def _is_strictly_vegetarian(self, meal: Dict) -> bool:
+        """
+        Check if a meal is strictly vegetarian (no meat/fish/chicken/egg).
+        
+        Args:
+            meal: The meal to check
+            
+        Returns:
+            bool: True if vegetarian, False otherwise
+        """
+        # Keywords that indicate non-vegetarian
+        non_veg_keywords = [
+            'chicken', 'fish', 'meat', 'egg', 'mutton', 'lamb', 'pork', 'beef',
+            'seafood', 'prawn', 'shrimp', 'crab', 'lobster', 'turkey', 'duck',
+            'murgh', 'machli', 'gosht', 'anda', 'keema', 'tandoori chicken'
+        ]
+        
+        # Check all text fields in the meal
+        for key, value in meal.items():
+            if isinstance(value, str):
+                value_lower = value.lower()
+                if any(keyword in value_lower for keyword in non_veg_keywords):
+                    return False
+        
+        return True
+    
+    def _calculate_meal_similarity(self, meal1: Dict, meal2: Dict) -> float:
+        """
+        Calculate similarity between two meals (0-1, where 1 is identical).
+        
+        Args:
+            meal1: First meal
+            meal2: Second meal
+            
+        Returns:
+            float: Similarity score (0-1)
+        """
+        name1 = self._get_meal_id(meal1).lower()
+        name2 = self._get_meal_id(meal2).lower()
+        
+        # Simple word-based similarity
+        words1 = set(name1.split())
+        words2 = set(name2.split())
+        
+        if not words1 or not words2:
+            return 0.0
+        
+        # Jaccard similarity
+        intersection = words1.intersection(words2)
+        union = words1.union(words2)
+        
+        return len(intersection) / len(union) if union else 0.0
 
     def _normalize_region(self, region: Optional[str]) -> Optional[str]:
         if not region:

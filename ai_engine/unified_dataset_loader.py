@@ -768,8 +768,9 @@ class UnifiedDatasetLoader:
                                 trimester: Optional[int] = None,
                                 season: Optional[str] = None,
                                 condition: Optional[str] = None,
-                                meal_type: Optional[str] = None) -> List[Dict]:
-        """Get meals matching specified preferences.
+                                meal_type: Optional[str] = None,
+                                log_relaxation: bool = False) -> List[Dict]:
+        """Get meals matching specified preferences with progressive filter relaxation.
         
         Args:
             region: 'North' or 'South'
@@ -778,10 +779,91 @@ class UnifiedDatasetLoader:
             season: 'summer', 'winter', 'monsoon'
             condition: 'diabetes', 'gestational_diabetes', etc.
             meal_type: 'breakfast', 'lunch', 'dinner', 'snack'
+            log_relaxation: If True, logs which filters were relaxed
         
         Returns:
             List of matching meals
         """
+        # Try with all filters first
+        results = self._search_with_filters(region, diet_type, trimester, season, condition, meal_type)
+        
+        if results:
+            return results
+        
+        # Progressive relaxation: relax one filter at a time
+        relaxed_filters = []
+        
+        # Step 1: Try without season (most specific, least critical)
+        if season:
+            results = self._search_with_filters(region, diet_type, trimester, None, condition, meal_type)
+            if results:
+                if log_relaxation:
+                    relaxed_filters.append('season')
+                    print(f"ℹ️ Relaxed filter: season (was: {season})")
+                return results
+        
+        # Step 2: Try without condition
+        if condition:
+            results = self._search_with_filters(region, diet_type, trimester, None, None, meal_type)
+            if results:
+                if log_relaxation:
+                    if season:
+                        relaxed_filters.append('season')
+                    relaxed_filters.append('condition')
+                    print(f"ℹ️ Relaxed filters: {', '.join(f for f in relaxed_filters if f)}")
+                return results
+        
+        # Step 3: Try without trimester
+        if trimester:
+            results = self._search_with_filters(region, diet_type, None, None, None, meal_type)
+            if results:
+                if log_relaxation:
+                    if season:
+                        relaxed_filters.append('season')
+                    if condition:
+                        relaxed_filters.append('condition')
+                    relaxed_filters.append('trimester')
+                    print(f"ℹ️ Relaxed filters: {', '.join(f for f in relaxed_filters if f)}")
+                return results
+        
+        # Step 4: Try without meal_type
+        if meal_type:
+            results = self._search_with_filters(region, diet_type, None, None, None, None)
+            if results:
+                if log_relaxation:
+                    if season:
+                        relaxed_filters.append('season')
+                    if condition:
+                        relaxed_filters.append('condition')
+                    if trimester:
+                        relaxed_filters.append('trimester')
+                    relaxed_filters.append('meal_type')
+                    print(f"ℹ️ Relaxed filters: {', '.join(f for f in relaxed_filters if f)}")
+                return results
+        
+        # Final fallback: just region and diet (never relax these)
+        results = self._search_with_filters(region, diet_type, None, None, None, None)
+        if log_relaxation and results:
+            print(f"ℹ️ Using only region and diet_type filters")
+        
+        return results
+    
+    def _search_with_filters(self,
+                            region: Optional[str] = None,
+                            diet_type: Optional[str] = None,
+                            trimester: Optional[int] = None,
+                            season: Optional[str] = None,
+                            condition: Optional[str] = None,
+                            meal_type: Optional[str] = None) -> List[Dict]:
+        """Internal method to search meals with specific filter combination."""
+        # Create cache key
+        cache_key = f"{region}_{diet_type}_{trimester}_{season}_{condition}_{meal_type}"
+        
+        # Check cache first
+        if cache_key in self._preference_cache:
+            return self._preference_cache[cache_key]
+        
+        # Normalize inputs
         results = []
         normalized_region = self._normalize_region(region)
         normalized_diet = self._normalize_diet(diet_type)
@@ -793,22 +875,18 @@ class UnifiedDatasetLoader:
             match = True
             
             # Check regional preference
-            # Include meals that match the region OR have "All" as region (generic meals)
             if normalized_region:
                 source_region = meal.get('source_region')
                 if source_region:
                     source_region_lower = source_region.lower()
-                    # Include if: exact match OR source is "all" (generic for all regions)
                     if source_region_lower != normalized_region and source_region_lower != 'all':
                         match = False
             
             # Check diet type
-            # Include meals that match the diet OR have "all" as diet (generic meals)
             if normalized_diet:
                 source_diet = meal.get('source_diet')
                 if source_diet:
                     source_diet_lower = source_diet.lower()
-                    # Include if: exact match OR source is "all" (generic for all diets)
                     if source_diet_lower != normalized_diet and source_diet_lower != 'all':
                         match = False
             
@@ -820,7 +898,6 @@ class UnifiedDatasetLoader:
                         match = False
             
             # Check special conditions
-            # Include meals that match the condition OR don't have a specific condition
             if normalized_condition:
                 source_condition = meal.get('source_condition')
                 if source_condition:
@@ -828,12 +905,10 @@ class UnifiedDatasetLoader:
                         match = False
             
             # Check season
-            # Include meals that match the season OR have "all" as season (generic meals)
             if normalized_season:
                 source_season = meal.get('source_season')
                 if source_season:
                     source_season_lower = source_season.lower()
-                    # Include if: exact match OR source is "all" (generic for all seasons)
                     if source_season_lower != normalized_season and source_season_lower != 'all':
                         match = False
             
@@ -848,8 +923,12 @@ class UnifiedDatasetLoader:
             if match:
                 results.append(meal)
         
+        # Store in cache (limit cache size)
+        if len(self._preference_cache) < self._preference_cache_max_size:
+            self._preference_cache[cache_key] = results
+        
         return results
-    
+
     def _find_meal_type_column(self, meal: Dict) -> Optional[str]:
         """Find the column containing meal type information."""
         possible_columns = ['meal_type', 'type', 'meal', 'breakfast_lunch_dinner', 'meal_time']
@@ -986,3 +1065,129 @@ class UnifiedDatasetLoader:
             'seasons': sorted([s for s in stats['by_season'].keys() if s]),
             'categories': list(self.meals_by_category.keys()),
         }
+    
+    def get_nutritional_data(self, meal_name: str) -> Dict:
+        """
+        Look up nutritional data for a specific meal from the datasets.
+        
+        Args:
+            meal_name: Name of the meal to look up
+            
+        Returns:
+            Dictionary with estimated nutritional values:
+            {
+                'calories': float,
+                'protein': float,
+                'carbs': float,
+                'fat': float,
+                'iron': float,
+                'calcium': float,
+                'folic_acid': float,
+                'fiber': float,
+                'vitamin_a': float,
+                'vitamin_c': float
+            }
+            Returns empty dict if no data found
+        """
+        meal_name_lower = meal_name.strip().lower()
+        
+        # Search in meals for matching name
+        for meal in self.meals:
+            # Try various name columns
+            for name_col in ['food', 'food_item', 'meal', 'dish', 'dish_name', 'name', 'item', 'recipe']:
+                if name_col in meal and meal[name_col]:
+                    if meal[name_col].strip().lower() == meal_name_lower:
+                        # Extract nutritional data from this meal
+                        nutrition = {}
+                        
+                        # Map common nutrition column names to standard keys
+                        nutrient_mapping = {
+                            'calories': ['calories', 'calorie', 'energy', 'kcal'],
+                            'protein': ['protein', 'proteins'],
+                            'carbs': ['carbohydrate', 'carbs', 'carbohydrates'],
+                            'fat': ['fat', 'fats', 'total_fat'],
+                            'iron': ['iron', 'fe'],
+                            'calcium': ['calcium', 'ca'],
+                            'folic_acid': ['folic_acid', 'folate', 'folic'],
+                            'fiber': ['fiber', 'dietary_fiber', 'fibre'],
+                            'vitamin_a': ['vitamin_a', 'vit_a', 'retinol'],
+                            'vitamin_c': ['vitamin_c', 'vit_c', 'ascorbic_acid'],
+                            'vitamin_b6': ['vitamin_b6', 'vit_b6', 'pyridoxine'],
+                            'vitamin_b12': ['vitamin_b12', 'vit_b12', 'cobalamin'],
+                            'vitamin_d': ['vitamin_d', 'vit_d'],
+                            'zinc': ['zinc', 'zn'],
+                            'magnesium': ['magnesium', 'mg']
+                        }
+                        
+                        # Extract nutrients
+                        for nutrient_key, possible_cols in nutrient_mapping.items():
+                            for col in possible_cols:
+                                if col in meal and meal[col]:
+                                    try:
+                                        # Try to convert to float, removing units
+                                        value_str = str(meal[col]).lower().replace('g', '').replace('mg', '').replace('mcg', '').replace('kcal', '').strip()
+                                        nutrition[nutrient_key] = float(value_str)
+                                        break
+                                    except (ValueError, TypeError):
+                                        pass
+                        
+                        return nutrition
+        
+        # If exact match not found, return default estimates based on meal name keywords
+        return self._estimate_nutrition_from_keywords(meal_name)
+    
+    def _estimate_nutrition_from_keywords(self, meal_name: str) -> Dict:
+        """
+        Estimate basic nutrition from meal name keywords when exact data not available.
+        
+        Args:
+            meal_name: Name of the meal
+            
+        Returns:
+            Dictionary with estimated nutritional values
+        """
+        meal_lower = meal_name.lower()
+        
+        # Default baseline nutrition (per serving)
+        nutrition = {
+            'calories': 300.0,
+            'protein': 10.0,
+            'carbs': 40.0,
+            'fat': 8.0,
+            'iron': 2.0,
+            'calcium': 100.0,
+            'folic_acid': 50.0,
+            'fiber': 5.0
+        }
+        
+        # Adjust based on keywords
+        # High protein foods
+        if any(word in meal_lower for word in ['egg', 'chicken', 'fish', 'dal', 'lentil', 'paneer', 'tofu', 'meat']):
+            nutrition['protein'] += 15
+            nutrition['calories'] += 50
+            nutrition['iron'] += 2
+        
+        # High carb foods
+        if any(word in meal_lower for word in ['rice', 'roti', 'bread', 'pasta', 'chapati', 'paratha']):
+            nutrition['carbs'] += 20
+            nutrition['calories'] += 100
+        
+        # Dairy
+        if any(word in meal_lower for word in ['milk', 'yogurt', 'curd', 'cheese', 'paneer']):
+            nutrition['calcium'] += 150
+            nutrition['protein'] += 8
+        
+        # Leafy greens
+        if any(word in meal_lower for word in ['spinach', 'palak', 'methi', 'kale', 'fenugreek']):
+            nutrition['iron'] += 3
+            nutrition['folic_acid'] += 100
+            nutrition['fiber'] += 3
+            nutrition['calcium'] += 50
+        
+        # Fruits
+        if any(word in meal_lower for word in ['fruit', 'apple', 'banana', 'orange', 'mango', 'papaya']):
+            nutrition['fiber'] += 3
+            nutrition['folic_acid'] += 30
+            nutrition['carbs'] += 15
+        
+        return nutrition
