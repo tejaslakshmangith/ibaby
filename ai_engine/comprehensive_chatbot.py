@@ -1183,7 +1183,7 @@ class ComprehensiveChatbot:
             'intent': intent,
             'source': 'ai_model',
             'response_time': response_time,
-            'from_cache': False
+            'from_cache': False,
             '_cache_time': time.time()
         }
         
