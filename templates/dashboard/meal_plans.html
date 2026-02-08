@@ -219,7 +219,7 @@
 
     .nutrition-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
         gap: 1.5rem;
     }
 
@@ -227,7 +227,6 @@
         background: white;
         border-radius: 16px;
         padding: 1.5rem;
-        text-align: center;
         transition: all 0.3s ease;
         border: 2px solid transparent;
         position: relative;
@@ -244,25 +243,99 @@
         background: var(--gradient-success);
     }
 
+    .nutrition-card.status-good::before {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    }
+
+    .nutrition-card.status-needs-attention::before {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    }
+
+    .nutrition-card.status-deficient::before {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    }
+
     .nutrition-card:hover {
         transform: translateY(-4px);
         box-shadow: var(--shadow-lg);
         border-color: var(--accent-emerald);
     }
 
+    .nutrition-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .nutrition-icon {
+        font-size: 1.5rem;
+        margin-right: 0.75rem;
+    }
+
+    .nutrition-label {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--gray-700);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
     .nutrition-value {
-        font-size: 2rem;
+        font-size: 1.75rem;
         font-weight: 800;
         color: var(--accent-emerald);
         margin-bottom: 0.5rem;
     }
 
-    .nutrition-label {
-        font-size: 0.9rem;
+    .nutrition-target {
+        font-size: 0.8rem;
+        color: var(--gray-500);
+        margin-bottom: 0.75rem;
+    }
+
+    .nutrition-progress {
+        width: 100%;
+        height: 8px;
+        background: var(--gray-200);
+        border-radius: 4px;
+        overflow: hidden;
+        margin-bottom: 0.5rem;
+    }
+
+    .nutrition-progress-bar {
+        height: 100%;
+        border-radius: 4px;
+        transition: width 0.5s ease;
+    }
+
+    .progress-good {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    }
+
+    .progress-needs-attention {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    }
+
+    .progress-deficient {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    }
+
+    .nutrition-status {
+        font-size: 0.75rem;
         font-weight: 600;
-        color: var(--gray-600);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        text-align: center;
+    }
+
+    .status-good {
+        color: #10b981;
+    }
+
+    .status-needs-attention {
+        color: #f59e0b;
+    }
+
+    .status-deficient {
+        color: #ef4444;
     }
 
     .meal-plan-display {
@@ -888,21 +961,67 @@
         if (!summary) return;
 
         const container = document.getElementById('nutrition-grid');
-        const metrics = [
-            { key: 'avg_calories', label: 'Average Calories', suffix: ' kcal', icon: 'fas fa-fire', color: 'var(--accent-emerald)' },
-            { key: 'avg_protein', label: 'Average Protein', suffix: ' g', icon: 'fas fa-dumbbell', color: 'var(--primary-pink)' },
-            { key: 'avg_carbs', label: 'Average Carbs', suffix: ' g', icon: 'fas fa-bread-slice', color: 'var(--accent-teal)' },
-            { key: 'avg_fat', label: 'Average Fat', suffix: ' g', icon: 'fas fa-oil-can', color: '#f59e0b' }
+        const dailyAvg = summary.daily_average || {};
+        const compliance = summary.compliance || {};
+        
+        const nutrients = [
+            { key: 'calories', label: 'Calories', icon: 'fas fa-fire', color: 'var(--accent-emerald)' },
+            { key: 'protein', label: 'Protein', icon: 'fas fa-dumbbell', color: 'var(--primary-pink)' },
+            { key: 'carbs', label: 'Carbs', icon: 'fas fa-bread-slice', color: 'var(--accent-teal)' },
+            { key: 'fat', label: 'Fat', icon: 'fas fa-oil-can', color: '#f59e0b' },
+            { key: 'fiber', label: 'Fiber', icon: 'fas fa-leaf', color: '#10b981' },
+            { key: 'iron', label: 'Iron', icon: 'fas fa-magnet', color: '#dc2626' },
+            { key: 'calcium', label: 'Calcium', icon: 'fas fa-bone', color: '#6366f1' },
+            { key: 'folic_acid', label: 'Folic Acid', icon: 'fas fa-pills', color: '#ec4899' },
+            { key: 'vitamin_a', label: 'Vitamin A', icon: 'fas fa-eye', color: '#f97316' },
+            { key: 'vitamin_b6', label: 'Vitamin B6', icon: 'fas fa-brain', color: '#8b5cf6' },
+            { key: 'vitamin_b12', label: 'Vitamin B12', icon: 'fas fa-heartbeat', color: '#ef4444' },
+            { key: 'vitamin_c', label: 'Vitamin C', icon: 'fas fa-lemon', color: '#eab308' },
+            { key: 'vitamin_d', label: 'Vitamin D', icon: 'fas fa-sun', color: '#f59e0b' },
+            { key: 'zinc', label: 'Zinc', icon: 'fas fa-shield-alt', color: '#14b8a6' },
+            { key: 'magnesium', label: 'Magnesium', icon: 'fas fa-atom', color: '#06b6d4' },
+            { key: 'omega3', label: 'Omega-3', icon: 'fas fa-fish', color: '#0ea5e9' }
         ];
 
         let html = '';
-        metrics.forEach(metric => {
-            const value = summary[metric.key] || 0;
+        nutrients.forEach(nutrient => {
+            const avgData = dailyAvg[nutrient.key] || {};
+            const compData = compliance[nutrient.key] || {};
+            
+            const value = avgData.value || 0;
+            const unit = avgData.unit || '';
+            const target = avgData.target || 0;
+            const percentage = compData.percentage || 0;
+            const status = compData.status || 'Good';
+            
+            // Determine status class and progress color
+            let statusClass = 'status-good';
+            let progressClass = 'progress-good';
+            if (percentage < 80) {
+                statusClass = 'status-deficient';
+                progressClass = 'progress-deficient';
+            } else if (percentage < 90 || percentage > 110) {
+                statusClass = 'status-needs-attention';
+                progressClass = 'progress-needs-attention';
+            }
+            
+            // Cap percentage display at 150% for visual clarity
+            const displayPercentage = Math.min(percentage, 150);
+            
             html += `
-                <div class="nutrition-card">
-                    <i class="${metric.icon} nutrition-icon" style="color: ${metric.color}; font-size: 2rem; margin-bottom: 1rem;"></i>
-                    <div class="nutrition-value">${Math.round(value)}</div>
-                    <div class="nutrition-label">${metric.label}</div>
+                <div class="nutrition-card ${statusClass}">
+                    <div class="nutrition-header">
+                        <i class="${nutrient.icon} nutrition-icon" style="color: ${nutrient.color};"></i>
+                        <div class="nutrition-label">${nutrient.label}</div>
+                    </div>
+                    <div class="nutrition-value">${value.toFixed(1)} <span style="font-size: 0.6em;">${unit}</span></div>
+                    <div class="nutrition-target">Target: ${target} ${unit}</div>
+                    <div class="nutrition-progress">
+                        <div class="nutrition-progress-bar ${progressClass}" style="width: ${displayPercentage}%"></div>
+                    </div>
+                    <div class="nutrition-status ${statusClass}">
+                        ${percentage.toFixed(0)}% of daily target
+                    </div>
                 </div>
             `;
         });

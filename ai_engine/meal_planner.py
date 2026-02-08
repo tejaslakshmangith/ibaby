@@ -82,7 +82,15 @@ class MealPlanner:
                 'fiber': 0,
                 'iron': 0,
                 'calcium': 0,
-                'folic_acid': 0
+                'folic_acid': 0,
+                'vitamin_a': 0,
+                'vitamin_b6': 0,
+                'vitamin_b12': 0,
+                'vitamin_c': 0,
+                'vitamin_d': 0,
+                'zinc': 0,
+                'magnesium': 0,
+                'omega3': 0
             }
             
             for day in range(1, days + 1):
@@ -129,7 +137,6 @@ class MealPlanner:
                     'region': region,
                     'diet_type': diet_type,
                     'trimester': trimester,
-                    'season': season,
                     'special_conditions': special_conditions,
                     'meal_frequency': meal_frequency
                 }
@@ -281,7 +288,7 @@ class MealPlanner:
         return meals
     
     def _calculate_day_nutrition(self, meals: Dict[str, Dict]) -> Dict[str, float]:
-        """Calculate nutrition values for all meals in a day."""
+        """Calculate nutrition values for all meals in a day with comprehensive nutrients."""
         nutrition = {
             'calories': 0,
             'protein': 0,
@@ -290,7 +297,15 @@ class MealPlanner:
             'fiber': 0,
             'iron': 0,
             'calcium': 0,
-            'folic_acid': 0
+            'folic_acid': 0,
+            'vitamin_a': 0,
+            'vitamin_b6': 0,
+            'vitamin_b12': 0,
+            'vitamin_c': 0,
+            'vitamin_d': 0,
+            'zinc': 0,
+            'magnesium': 0,
+            'omega3': 0
         }
         
         for meal_type, meal in meals.items():
@@ -303,31 +318,61 @@ class MealPlanner:
         return nutrition
     
     def _get_pregnancy_nutrition_targets(self, trimester: int) -> Dict[str, Dict]:
-        """Get recommended nutrition targets by trimester."""
+        """Get recommended nutrition targets by trimester with comprehensive nutrients."""
         targets = {
             1: {
                 'calories': {'daily': 2000, 'unit': 'kcal'},
                 'protein': {'daily': 50, 'unit': 'g'},
+                'carbs': {'daily': 175, 'unit': 'g'},
+                'fat': {'daily': 70, 'unit': 'g'},
+                'fiber': {'daily': 25, 'unit': 'g'},
                 'calcium': {'daily': 1000, 'unit': 'mg'},
                 'iron': {'daily': 27, 'unit': 'mg'},
                 'folic_acid': {'daily': 600, 'unit': 'mcg'},
-                'fiber': {'daily': 25, 'unit': 'g'}
+                'vitamin_a': {'daily': 770, 'unit': 'mcg'},
+                'vitamin_b6': {'daily': 1.9, 'unit': 'mg'},
+                'vitamin_b12': {'daily': 2.6, 'unit': 'mcg'},
+                'vitamin_c': {'daily': 85, 'unit': 'mg'},
+                'vitamin_d': {'daily': 15, 'unit': 'mcg'},
+                'zinc': {'daily': 11, 'unit': 'mg'},
+                'magnesium': {'daily': 350, 'unit': 'mg'},
+                'omega3': {'daily': 300, 'unit': 'mg'}
             },
             2: {
                 'calories': {'daily': 2300, 'unit': 'kcal'},
                 'protein': {'daily': 60, 'unit': 'g'},
+                'carbs': {'daily': 175, 'unit': 'g'},
+                'fat': {'daily': 70, 'unit': 'g'},
+                'fiber': {'daily': 25, 'unit': 'g'},
                 'calcium': {'daily': 1000, 'unit': 'mg'},
                 'iron': {'daily': 27, 'unit': 'mg'},
                 'folic_acid': {'daily': 600, 'unit': 'mcg'},
-                'fiber': {'daily': 25, 'unit': 'g'}
+                'vitamin_a': {'daily': 770, 'unit': 'mcg'},
+                'vitamin_b6': {'daily': 1.9, 'unit': 'mg'},
+                'vitamin_b12': {'daily': 2.6, 'unit': 'mcg'},
+                'vitamin_c': {'daily': 85, 'unit': 'mg'},
+                'vitamin_d': {'daily': 15, 'unit': 'mcg'},
+                'zinc': {'daily': 11, 'unit': 'mg'},
+                'magnesium': {'daily': 360, 'unit': 'mg'},
+                'omega3': {'daily': 300, 'unit': 'mg'}
             },
             3: {
                 'calories': {'daily': 2600, 'unit': 'kcal'},
                 'protein': {'daily': 70, 'unit': 'g'},
+                'carbs': {'daily': 175, 'unit': 'g'},
+                'fat': {'daily': 70, 'unit': 'g'},
+                'fiber': {'daily': 25, 'unit': 'g'},
                 'calcium': {'daily': 1000, 'unit': 'mg'},
                 'iron': {'daily': 27, 'unit': 'mg'},
                 'folic_acid': {'daily': 600, 'unit': 'mcg'},
-                'fiber': {'daily': 25, 'unit': 'g'}
+                'vitamin_a': {'daily': 770, 'unit': 'mcg'},
+                'vitamin_b6': {'daily': 1.9, 'unit': 'mg'},
+                'vitamin_b12': {'daily': 2.6, 'unit': 'mcg'},
+                'vitamin_c': {'daily': 85, 'unit': 'mg'},
+                'vitamin_d': {'daily': 15, 'unit': 'mcg'},
+                'zinc': {'daily': 11, 'unit': 'mg'},
+                'magnesium': {'daily': 360, 'unit': 'mg'},
+                'omega3': {'daily': 300, 'unit': 'mg'}
             }
         }
         
