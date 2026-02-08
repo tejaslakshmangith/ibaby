@@ -72,6 +72,9 @@ class MealPlanner:
             else:
                 meal_types = ['breakfast', 'lunch', 'dinner']  # 3 main meals
             
+            # Track used meals to ensure variety (avoid immediate repetition)
+            used_meals_tracker = {meal_type: set() for meal_type in meal_types}
+            
             # Generate daily meal plans
             meal_plan = []
             data_sources_used = set()
@@ -96,7 +99,8 @@ class MealPlanner:
                     trimester=trimester,
                     season=season,
                     special_conditions=special_conditions or [],
-                    data_sources_used=data_sources_used
+                    data_sources_used=data_sources_used,
+                    used_meals_tracker=used_meals_tracker
                 )
                 
                 if 'error' in day_meals:
@@ -150,9 +154,10 @@ class MealPlanner:
         trimester: int,
         season: Optional[str],
         special_conditions: List[str],
-        data_sources_used: set
+        data_sources_used: set,
+        used_meals_tracker: Dict[str, set]
     ) -> Dict:
-        """Generate meals for a single day."""
+        """Generate meals for a single day with variety tracking."""
         try:
             day_meals = {
                 'day': day,
@@ -172,8 +177,25 @@ class MealPlanner:
                 )
                 
                 if meals:
-                    selected_meal = random.choice(meals)
+                    # Filter out recently used meals for variety (for multi-day plans)
+                    available_meals = [m for m in meals if self._get_meal_id(m) not in used_meals_tracker[meal_type]]
+                    
+                    # If all meals have been used recently, reset tracker and use all meals
+                    if not available_meals:
+                        used_meals_tracker[meal_type].clear()
+                        available_meals = meals
+                    
+                    selected_meal = random.choice(available_meals)
                     day_meals['meals'][meal_type] = selected_meal
+                    
+                    # Track this meal to avoid immediate repetition
+                    used_meals_tracker[meal_type].add(self._get_meal_id(selected_meal))
+                    
+                    # Keep tracker size manageable (last 3 meals for each type)
+                    if len(used_meals_tracker[meal_type]) > 3:
+                        # Remove oldest entry (convert to list, remove first, convert back)
+                        tracker_list = list(used_meals_tracker[meal_type])
+                        used_meals_tracker[meal_type] = set(tracker_list[1:])
                     
                     # Track data source
                     category = selected_meal.get('source_category', 'unknown')
@@ -186,7 +208,15 @@ class MealPlanner:
                         diet_type=diet_type
                     )
                     if fallback_meals:
-                        day_meals['meals'][meal_type] = random.choice(fallback_meals)
+                        # Apply same variety logic to fallback meals
+                        available_fallback = [m for m in fallback_meals if self._get_meal_id(m) not in used_meals_tracker[meal_type]]
+                        if not available_fallback:
+                            used_meals_tracker[meal_type].clear()
+                            available_fallback = fallback_meals
+                        
+                        selected_meal = random.choice(available_fallback)
+                        day_meals['meals'][meal_type] = selected_meal
+                        used_meals_tracker[meal_type].add(self._get_meal_id(selected_meal))
                         data_sources_used.add('regional_fallback')
                     else:
                         # Return error - no meals available
@@ -199,6 +229,15 @@ class MealPlanner:
         except Exception as e:
             print(f"Error generating day {day} meals: {e}")
             return {'error': f'Error generating meals for day {day}: {str(e)}'}
+    
+    def _get_meal_id(self, meal: Dict) -> str:
+        """Get unique identifier for a meal to track usage."""
+        # Try multiple columns to identify the meal
+        for col in ['food', 'food_item', 'meal', 'dish', 'dish_name', 'recipe', 'name', 'item']:
+            if col in meal and meal[col]:
+                return str(meal[col]).strip().lower()
+        # Fallback: use hash of meal dict (less ideal but works)
+        return str(hash(frozenset(meal.items())))
     
     def _get_meal_for_type(
         self,

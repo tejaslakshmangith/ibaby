@@ -131,7 +131,7 @@ def ask_question():
 @login_required
 def get_suggestions():
     """
-    Get suggested questions.
+    Get trimester-specific and contextual suggested questions.
     
     Returns:
         {
@@ -140,30 +140,70 @@ def get_suggestions():
     """
     try:
         trimester = current_user.current_trimester if hasattr(current_user, 'current_trimester') and current_user.current_trimester else 2
+        region = current_user.region_preference if hasattr(current_user, 'region_preference') else None
         
-        suggestions = [
-            f"What should I eat in trimester {trimester}?",
-            "What foods should I avoid during pregnancy?",
-            "Can I eat eggs during pregnancy?",
-            "Is fish safe during pregnancy?",
-            "What are good sources of iron?",
-            "Which fruits are best for pregnancy?",
-            "What is a good meal plan for today?",
-            "What foods help with morning sickness?"
-        ]
+        # Trimester-specific questions that are answerable by the chatbot
+        trimester_questions = {
+            1: [
+                "What foods help with morning sickness?",
+                "What should I eat in first trimester?",
+                "Can I eat eggs during pregnancy?",
+                "Which fruits are best for first trimester?",
+                "What foods should I avoid in early pregnancy?",
+                "Is fish safe during pregnancy?",
+                "What are good sources of folic acid?",
+                "Can I drink milk during pregnancy?"
+            ],
+            2: [
+                f"What should I eat in trimester {trimester}?",
+                "What foods should I avoid during pregnancy?",
+                "Can I eat eggs during pregnancy?",
+                "Is fish safe during pregnancy?",
+                "What are good sources of iron?",
+                "Which fruits are best for pregnancy?",
+                "What foods help prevent anemia?",
+                "Can I eat seafood during pregnancy?"
+            ],
+            3: [
+                "What should I eat in third trimester?",
+                "What foods should I avoid in late pregnancy?",
+                "What foods help with energy in third trimester?",
+                "Can I eat spicy food in third trimester?",
+                "What are good sources of calcium?",
+                "Which foods help prepare for labor?",
+                "Is it safe to eat dates in third trimester?",
+                "What foods prevent swelling during pregnancy?"
+            ]
+        }
+        
+        # Get trimester-specific questions
+        base_suggestions = trimester_questions.get(trimester, trimester_questions[2])
+        
+        # Add region-specific question if region is set
+        if region:
+            base_suggestions.insert(0, f"What are good {region} Indian foods for pregnancy?")
+        
+        # Limit to 8 suggestions
+        suggestions = base_suggestions[:8]
         
         return jsonify({
             'success': True,
             'suggestions': suggestions,
-            'trimester': trimester
+            'trimester': trimester,
+            'region': region
         })
         
     except Exception as e:
         print(f"Error getting suggestions: {e}")
         return jsonify({
             'error': 'Could not load suggestions',
-            'suggestions': []
-        }), 500
+            'suggestions': [
+                "What should I eat during pregnancy?",
+                "What foods should I avoid?",
+                "Can I eat eggs during pregnancy?",
+                "Is fish safe during pregnancy?"
+            ]
+        }), 200  # Return 200 with default suggestions instead of error
 
 
 @chatbot_bp.route('/api/history', methods=['GET'])

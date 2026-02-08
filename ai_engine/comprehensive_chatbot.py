@@ -24,10 +24,17 @@ class ComprehensiveChatbot:
 
         # Configurable token budgets (default capped to 300 to conserve quota)
         self.solar_max_tokens = int(os.getenv('SOLAR_MAX_TOKENS', '300'))
+        
+        # AI model timeout (default 2.5 seconds to ensure <3s total response time)
+        self.ai_timeout = float(os.getenv('AI_TIMEOUT_SECONDS', '2.5'))
 
-        # Request limiting
-        self.rate_limit_per_min = int(os.getenv('CHATBOT_RATE_LIMIT_PER_MIN', '10'))
+        # Request limiting - More permissive default (20/min instead of 10/min)
+        self.rate_limit_per_min = int(os.getenv('CHATBOT_RATE_LIMIT_PER_MIN', '20'))
         self._recent_calls = deque()
+        
+        # Response caching for frequently asked questions
+        self._response_cache = {}
+        self._cache_ttl = int(os.getenv('CACHE_TTL_SECONDS', '3600'))  # 1 hour default
         
         # Initialize Solar Pro 3 as the only external provider
         self.solar_available = False
@@ -48,6 +55,8 @@ class ComprehensiveChatbot:
         print(f"✓ Loaded {len(self.datasets)} dataset categories")
         print(f"✓ Total knowledge entries: {self._count_total_entries()}")
         print(f"✓ Using UnifiedDatasetLoader with {len(self.unified_loader.meals)} total meals")
+        print(f"✓ Response caching enabled (TTL: {self._cache_ttl}s)")
+        print(f"✓ AI timeout: {self.ai_timeout}s")
         print(f"{'='*80}\n")
 
     def _init_solar(self):
@@ -70,32 +79,64 @@ class ComprehensiveChatbot:
     
 
     def _ask_solar(self, prompt: str) -> str:
-        """Use Solar Pro 3 as the sole external model."""
+        """Use Solar Pro 3 as the sole external model with timeout handling."""
         if not self.solar_available or not self.solar_api_key or not self.solar_model_name or not self.solar_client:
             return ""
         try:
-            response = self.solar_client.chat.completions.create(
-                model=self.solar_model_name,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a pregnancy nutrition assistant. Provide concise, non-diagnostic guidance. "
-                            "Always include a short medical disclaimer."
-                        )
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                max_tokens=self.solar_max_tokens
-            )
-            if response and response.choices:
-                content = response.choices[0].message.content or ""
-                return content.strip()
-            return ""
+            import signal
+            
+            # Define timeout handler
+            def timeout_handler(signum, frame):
+                raise TimeoutError("AI model request timed out")
+            
+            # Set timeout alarm (Unix only, fallback to no timeout on Windows)
+            try:
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(int(self.ai_timeout))
+            except (AttributeError, ValueError):
+                # Windows doesn't support SIGALRM, continue without timeout
+                pass
+            
+            try:
+                response = self.solar_client.chat.completions.create(
+                    model=self.solar_model_name,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a pregnancy nutrition assistant. Provide concise, non-diagnostic guidance. "
+                                "Keep responses brief and practical. Include a short medical disclaimer."
+                            )
+                        },
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.7,
+                    max_tokens=self.solar_max_tokens,
+                    timeout=self.ai_timeout  # Client-side timeout
+                )
+                
+                # Cancel alarm if set
+                try:
+                    signal.alarm(0)
+                except AttributeError:
+                    pass
+                
+                if response and response.choices:
+                    content = response.choices[0].message.content or ""
+                    return content.strip()
+                return ""
+            except TimeoutError:
+                print(f"⚠ Solar API timeout after {self.ai_timeout}s")
+                return ""
         except Exception as e:
             print(f"⚠ Solar API error: {e}")
             return ""
+        finally:
+            # Ensure alarm is cancelled
+            try:
+                signal.alarm(0)
+            except (AttributeError, NameError):
+                pass
 
     def _rate_limit_allows(self) -> bool:
         """Simple per-process rate limit: defaults to 10 requests/minute."""
@@ -1045,6 +1086,18 @@ class ComprehensiveChatbot:
         import time
         start_time = time.time()
         
+        # Check response cache first (instant)
+        cache_key = f"{question.lower().strip()}_{trimester or 'any'}"
+        if cache_key in self._response_cache:
+            cached_response = self._response_cache[cache_key]
+            # Check if cache is still valid (TTL not expired)
+            cache_time = cached_response.get('_cache_time', 0)
+            if time.time() - cache_time < self._cache_ttl:
+                cached_response['response_time'] = time.time() - start_time
+                cached_response['from_cache'] = True
+                return cached_response
+        
+        
         # Extract keywords and classify intent
         keywords = self.extract_keywords(question)
         intent = self.classify_intent(question)
@@ -1121,7 +1174,7 @@ class ComprehensiveChatbot:
         
         response_time = time.time() - start_time
         
-        return {
+        result = {
             'query_reflection': query_reflection,
             'answer': answer_text,
             'dos': dos_final,
@@ -1130,8 +1183,14 @@ class ComprehensiveChatbot:
             'intent': intent,
             'source': 'ai_model',
             'response_time': response_time,
-            'from_cache': False
+            'from_cache': False,
+            '_cache_time': time.time()
         }
+        
+        # Store in cache for future requests
+        self._response_cache[cache_key] = result.copy()
+        
+        return result
 
     def quick_answer(self, question: str, trimester: Optional[int] = None) -> str:
         """
