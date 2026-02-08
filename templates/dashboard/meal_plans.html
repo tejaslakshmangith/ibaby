@@ -994,19 +994,23 @@
             const percentage = Number(compData.percentage) || 0;
             const status = compData.status || 'Good';
             
+            // Ensure valid numbers for display
+            const safeValue = isNaN(value) ? 0 : value;
+            const safePercentage = isNaN(percentage) ? 0 : percentage;
+            
             // Determine status class and progress color
             let statusClass = 'status-good';
             let progressClass = 'progress-good';
-            if (percentage < 80) {
+            if (safePercentage < 80) {
                 statusClass = 'status-deficient';
                 progressClass = 'progress-deficient';
-            } else if (percentage < 90 || percentage > 110) {
+            } else if (safePercentage < 90 || safePercentage > 110) {
                 statusClass = 'status-needs-attention';
                 progressClass = 'progress-needs-attention';
             }
             
             // Cap percentage display at 150% for visual clarity
-            const displayPercentage = Math.min(percentage, 150);
+            const displayPercentage = Math.min(safePercentage, 150);
             
             html += `
                 <div class="nutrition-card ${statusClass}">
@@ -1014,13 +1018,13 @@
                         <i class="${nutrient.icon} nutrition-icon" style="color: ${nutrient.color};"></i>
                         <div class="nutrition-label">${nutrient.label}</div>
                     </div>
-                    <div class="nutrition-value">${value.toFixed(1)} <span style="font-size: 0.6em;">${unit}</span></div>
+                    <div class="nutrition-value">${safeValue.toFixed(1)} <span style="font-size: 0.6em;">${unit}</span></div>
                     <div class="nutrition-target">Target: ${target} ${unit}</div>
                     <div class="nutrition-progress">
                         <div class="nutrition-progress-bar ${progressClass}" style="width: ${displayPercentage}%"></div>
                     </div>
                     <div class="nutrition-status ${statusClass}">
-                        ${percentage.toFixed(0)}% of daily target
+                        ${safePercentage.toFixed(0)}% of daily target
                     </div>
                 </div>
             `;
