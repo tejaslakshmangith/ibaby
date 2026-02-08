@@ -66,13 +66,34 @@ def ask_question():
         season = data.get('season')
         
         # Get comprehensive chatbot with all datasets + Gemini AI fallback
-        chatbot = get_comprehensive_chatbot()
+        try:
+            chatbot = get_comprehensive_chatbot()
+        except Exception as e:
+            print(f"❌ Failed to initialize chatbot: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({
+                'success': False,
+                'error': 'Chatbot initialization failed',
+                'answer': 'Sorry, the chatbot is temporarily unavailable. Please try again later.'
+            }), 500
 
         # Use structured answer to include dos/donts and intent metadata
-        result = chatbot.answer_question_structured(
-            question=question,
-            trimester=trimester
-        )
+        try:
+            result = chatbot.answer_question_structured(
+                question=question,
+                trimester=trimester
+            )
+        except Exception as e:
+            print(f"❌ Error generating answer for question '{question}': {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({
+                'success': False,
+                'error': 'Error generating answer',
+                'answer': 'Sorry, I encountered an error processing your question. Please try rephrasing it or try again later.'
+            }), 500
+        
         # Inject region/season for logging context
         result['region'] = region
         result['season'] = season
