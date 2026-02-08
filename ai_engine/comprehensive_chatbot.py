@@ -66,6 +66,14 @@ class ComprehensiveChatbot:
         self._recent_calls.append(now)
         return True
     
+    def _create_default_context(self, trimester=None, region=None, diet_type='general'):
+        """Create a default context dictionary for Gemini AI calls."""
+        return {
+            'trimester': trimester,
+            'region': region,
+            'diet_type': diet_type
+        }
+    
     def _load_all_datasets(self):
         """Load all available datasets from data folder."""
         base_path = os.path.join(os.path.dirname(__file__), '../data')
@@ -423,11 +431,7 @@ class ComprehensiveChatbot:
         if not answer_parts:
             # Try AI fallback with Gemini
             if self._rate_limit_allows():
-                context = {
-                    'trimester': trimester,
-                    'region': region,
-                    'diet_type': 'general'
-                }
+                context = self._create_default_context(trimester, region)
                 gemini_ans = self.gemini_ai.enhance_chatbot_response(question, context)
                 if gemini_ans:
                     return f"🤖 **AI-Powered Answer:**\n\n{gemini_ans}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
@@ -443,11 +447,7 @@ class ComprehensiveChatbot:
         # If final answer is still empty, try Gemini AI fallback
         if not final_answer.strip():
             if self._rate_limit_allows():
-                context = {
-                    'trimester': trimester,
-                    'region': region,
-                    'diet_type': 'general'
-                }
+                context = self._create_default_context(trimester, region)
                 gemini_ans = self.gemini_ai.enhance_chatbot_response(question, context)
                 if gemini_ans:
                     return f"🤖 **AI-Powered Answer:**\n\n{gemini_ans}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
@@ -592,11 +592,7 @@ class ComprehensiveChatbot:
         # Try Gemini AI for unknown foods
         else:
             if self._rate_limit_allows():
-                context = {
-                    'trimester': None,
-                    'region': None,
-                    'diet_type': 'general'
-                }
+                context = self._create_default_context()
                 gemini_ans = self.gemini_ai.enhance_chatbot_response(f"Is {food} safe to eat during pregnancy? What are the benefits and risks?", context)
                 if gemini_ans:
                     return f"**{food.title()}:**\n✅ AI Response:\n{gemini_ans}\n"
@@ -777,11 +773,7 @@ class ComprehensiveChatbot:
                     answer_parts.append(f"  💡 Note: {info['remarks']}")
                 answer_parts.append("")  # Blank line
             elif self._rate_limit_allows():
-                context = {
-                    'trimester': None,
-                    'region': None,
-                    'diet_type': 'general'
-                }
+                context = self._create_default_context()
                 gemini_ans = self.gemini_ai.enhance_chatbot_response(f"What are the nutritional benefits and risks of eating {keyword} during pregnancy?", context)
                 if gemini_ans:
                     found_any = True
@@ -818,11 +810,7 @@ class ComprehensiveChatbot:
         # If no food found in database, try Gemini AI for each keyword
         if not found_any and keywords and self._rate_limit_allows():
             for keyword in keywords[:3]:  # Limit to first 3 keywords
-                context = {
-                    'trimester': None,
-                    'region': None,
-                    'diet_type': 'general'
-                }
+                context = self._create_default_context()
                 gemini_info = self.gemini_ai.enhance_chatbot_response(f"Tell me about {keyword} during pregnancy - is it safe? What are the benefits?", context)
                 if gemini_info:
                     answer_parts.append(f"🤖 **{keyword.title()}** (AI-Powered):")
