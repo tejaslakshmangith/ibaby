@@ -479,8 +479,15 @@ class ComprehensiveChatbot:
         if trimester:
             final_answer += f"\n\n💡 Tip: Always consult your doctor before making major dietary changes."
         
-        # If final answer is still empty, try multi-tier AI fallback
-        if not final_answer.strip():
+        # Check if answer is poor quality (too short or generic)
+        is_poor_quality = (
+            len(final_answer.strip()) < 100 or
+            'For specific safety information' in final_answer or
+            final_answer.count('**General Safety Guidelines:**') > 2  # Repeated generic content
+        )
+        
+        # If final answer is poor quality or empty, try multi-tier AI fallback
+        if not final_answer.strip() or is_poor_quality:
             if self._rate_limit_allows():
                 context = self._create_default_context(trimester, region)
                 
@@ -494,7 +501,7 @@ class ComprehensiveChatbot:
                 if langchain_ans:
                     return self._format_ai_response(langchain_ans)
             
-            # Final fallback: Rule-based response
+            # Final fallback: Rule-based response from LangChain AI
             return self.langchain_ai.get_fallback_response(question)
         
         return final_answer
@@ -1120,18 +1127,24 @@ class ComprehensiveChatbot:
         # If we found cached data with Do's/Don'ts, build answer from it
         if needs_dos_donts and source == 'database_cache' and (dos_final or donts_final):
             cached_answer = self.answer_question(question, trimester)
-            response_time = time.time() - start_time
-            return {
-                'query_reflection': query_reflection,
-                'answer': cached_answer,
-                'dos': dos_final,
-                'donts': donts_final,
-                'keywords': keywords,
-                'intent': intent,
-                'source': source,
-                'response_time': response_time,
-                'from_cache': True
-            }
+            
+            # Check if cached_answer is actually useful (not generic fallback)
+            # If answer is too short or generic, skip the cache and use AI
+            if len(cached_answer.strip()) < 100 or 'For specific safety information' in cached_answer:
+                source = 'ai_model'  # Reset source to try AI instead
+            else:
+                response_time = time.time() - start_time
+                return {
+                    'query_reflection': query_reflection,
+                    'answer': cached_answer,
+                    'dos': dos_final,
+                    'donts': donts_final,
+                    'keywords': keywords,
+                    'intent': intent,
+                    'source': source,
+                    'response_time': response_time,
+                    'from_cache': True
+                }
         
         # STEP 2: FALLBACK - If not in cache, use AI model for FAST answer
         response_time_ai_start = time.time()
