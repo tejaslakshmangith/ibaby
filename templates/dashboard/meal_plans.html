@@ -573,18 +573,6 @@
                         </div>
 
                         <div class="form-group-modern">
-                            <label for="season" class="form-label-modern">
-                                <i class="fas fa-cloud-sun me-2" style="color: var(--accent-emerald);"></i>
-                                {% if session.get('language') == 'te' %}కాలం{% else %}Season{% endif %}
-                            </label>
-                            <select class="form-select-modern" id="season">
-                                <option value="">
-                                    {% if session.get('language') == 'te' %}కాలం ఎంచుకోండి (ఐచ్ఛికం){% else %}Select Season (Optional){% endif %}
-                                </option>
-                            </select>
-                        </div>
-
-                        <div class="form-group-modern">
                             <label for="meal-frequency" class="form-label-modern">
                                 <i class="fas fa-utensils me-2" style="color: var(--accent-emerald);"></i>
                                 {% if session.get('language') == 'te' %}భోజనాల సంఖ్య{% else %}Meals Per Day{% endif %}
@@ -752,11 +740,9 @@
                     // Filter out empty arrays and provide fallbacks
                     const regions = (data.regions && data.regions.length > 0) ? data.regions : ['North', 'South'];
                     const diets = (data.diets && data.diets.length > 0) ? data.diets : ['veg', 'nonveg'];
-                    const seasons = (data.seasons && data.seasons.length > 0) ? data.seasons : ['summer', 'winter', 'monsoon'];
                     
                     console.log('Regions:', regions);
                     console.log('Diets:', diets);
-                    console.log('Seasons:', seasons);
                     
                     // Populate regions
                     const regionSelect = document.getElementById('region');
@@ -782,17 +768,6 @@
                             dietSelect.appendChild(option);
                         });
                     }
-
-                    // Populate seasons
-                    const seasonSelect = document.getElementById('season');
-                    if (seasonSelect) {
-                        seasons.forEach(season => {
-                            const option = document.createElement('option');
-                            option.value = season;
-                            option.textContent = season.charAt(0).toUpperCase() + season.slice(1);
-                            seasonSelect.appendChild(option);
-                        });
-                    }
                 } else {
                     console.error('API returned success=false');
                     applyFallbackPreferences();
@@ -808,7 +783,6 @@
         // Fallback - add hardcoded options
         const regions = ['North', 'South'];
         const diets = ['veg', 'nonveg'];
-        const seasons = ['summer', 'winter', 'monsoon'];
         
         const regionSelect = document.getElementById('region');
         if (regionSelect) {
@@ -829,23 +803,12 @@
                 dietSelect.appendChild(option);
             });
         }
-        
-        const seasonSelect = document.getElementById('season');
-        if (seasonSelect) {
-            seasons.forEach(season => {
-                const option = document.createElement('option');
-                option.value = season;
-                option.textContent = season.charAt(0).toUpperCase() + season.slice(1);
-                seasonSelect.appendChild(option);
-            });
-        }
     }
 
     function generateMealPlan() {
         const days = parseInt(document.getElementById('days').value);
         const region = document.getElementById('region').value;
         const dietType = document.getElementById('diet-type').value;
-        const season = document.getElementById('season').value;
         const mealFrequency = document.getElementById('meal-frequency').value;
 
         // Validation
@@ -877,11 +840,6 @@
             diet_type: dietType,
             meal_frequency: mealFrequency
         };
-
-        // Include season if selected (optional)
-        if (season) {
-            payload.season = season;
-        }
 
         // Call API
         fetch('/meal-plans/api/generate', {

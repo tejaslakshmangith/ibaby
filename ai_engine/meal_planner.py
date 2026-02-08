@@ -27,7 +27,6 @@ class MealPlanner:
         region: Optional[str] = None,
         diet_type: Optional[str] = None,
         trimester: Optional[int] = None,
-        season: Optional[str] = None,
         special_conditions: Optional[List[str]] = None,
         meal_frequency: str = '3meals'
     ) -> Dict:
@@ -40,7 +39,6 @@ class MealPlanner:
             region: Regional preference (required)
             diet_type: Diet type - 'veg', 'nonveg', 'vegan' (required)
             trimester: Pregnancy trimester 1-3 (required)
-            season: Seasonal preference - 'summer', 'winter', 'monsoon' (optional)
             special_conditions: List of conditions like 'diabetes', 'gestational_diabetes'
             meal_frequency: '3meals' (breakfast, lunch, dinner) or '5meals' (add snacks)
         
@@ -54,7 +52,7 @@ class MealPlanner:
             }
         """
         try:
-            # Validate required preferences (season is optional)
+            # Validate required preferences
             if not all([region, diet_type, trimester]):
                 return {
                     'error': 'Required preferences: region, diet_type, trimester'
@@ -63,8 +61,6 @@ class MealPlanner:
             # Normalize inputs
             region = self._normalize_region(region)
             diet_type = self._normalize_diet(diet_type)
-            if season:
-                season = self._normalize_season(season)
             
             # Determine which meal types to generate
             if meal_frequency == '5meals':
@@ -97,7 +93,6 @@ class MealPlanner:
                     region=region,
                     diet_type=diet_type,
                     trimester=trimester,
-                    season=season,
                     special_conditions=special_conditions or [],
                     data_sources_used=data_sources_used,
                     used_meals_tracker=used_meals_tracker
@@ -152,7 +147,6 @@ class MealPlanner:
         region: str,
         diet_type: str,
         trimester: int,
-        season: Optional[str],
         special_conditions: List[str],
         data_sources_used: set,
         used_meals_tracker: Dict[str, set]
@@ -172,7 +166,6 @@ class MealPlanner:
                     region=region,
                     diet_type=diet_type,
                     trimester=trimester,
-                    season=season,
                     special_conditions=special_conditions
                 )
                 
@@ -245,7 +238,6 @@ class MealPlanner:
         region: str,
         diet_type: str,
         trimester: int,
-        season: Optional[str],
         special_conditions: List[str]
     ) -> List[Dict]:
         """Get suitable meals for specific meal type with all preferences."""
@@ -253,43 +245,23 @@ class MealPlanner:
         # Try to get meals matching all preferences (including condition if applicable)
         condition = special_conditions[0] if special_conditions else None
         
-        # Try with all parameters if season is provided
-        if season:
-            meals = self.unified_loader.get_meals_by_preference(
-                region=region,
-                diet_type=diet_type,
-                trimester=trimester,
-                season=season,
-                condition=condition,
-                meal_type=meal_type
-            )
-        else:
-            # Try without season
-            meals = self.unified_loader.get_meals_by_preference(
-                region=region,
-                diet_type=diet_type,
-                trimester=trimester,
-                condition=condition,
-                meal_type=meal_type
-            )
+        # Try without season (season parameter removed)
+        meals = self.unified_loader.get_meals_by_preference(
+            region=region,
+            diet_type=diet_type,
+            trimester=trimester,
+            condition=condition,
+            meal_type=meal_type
+        )
         
         # If no exact match, try without condition
         if not meals and condition:
-            if season:
-                meals = self.unified_loader.get_meals_by_preference(
-                    region=region,
-                    diet_type=diet_type,
-                    trimester=trimester,
-                    season=season,
-                    meal_type=meal_type
-                )
-            else:
-                meals = self.unified_loader.get_meals_by_preference(
-                    region=region,
-                    diet_type=diet_type,
-                    trimester=trimester,
-                    meal_type=meal_type
-                )
+            meals = self.unified_loader.get_meals_by_preference(
+                region=region,
+                diet_type=diet_type,
+                trimester=trimester,
+                meal_type=meal_type
+            )
         
         # If still no match, try without trimester
         if not meals:
@@ -476,16 +448,4 @@ class MealPlanner:
             return 'nonveg'
         if 'vegan' in value:
             return 'vegan'
-        return value
-
-    def _normalize_season(self, season: Optional[str]) -> Optional[str]:
-        if not season:
-            return None
-        value = season.strip().lower()
-        if 'summer' in value:
-            return 'summer'
-        if 'winter' in value:
-            return 'winter'
-        if 'monsoon' in value or 'rain' in value:
-            return 'monsoon'
         return value
