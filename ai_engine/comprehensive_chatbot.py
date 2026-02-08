@@ -1,4 +1,4 @@
-"""Comprehensive Chatbot with Access to ALL Datasets + Gemini AI."""
+"""Comprehensive Chatbot with Access to ALL Datasets + Multi-AI Support."""
 import pandas as pd
 from typing import Dict, List, Optional
 import os
@@ -6,6 +6,7 @@ import json
 from collections import deque
 from ai_engine.unified_dataset_loader import UnifiedDatasetLoader
 from ai_engine.gemini_integration import GeminiNutritionAI
+from ai_engine.langchain_ai import get_langchain_ai
 from dotenv import load_dotenv
 import time
 
@@ -17,7 +18,7 @@ class ComprehensiveChatbot:
     """Chatbot that can answer from all available datasets."""
     
     def __init__(self):
-        """Initialize chatbot with unified dataset loader and Gemini AI."""
+        """Initialize chatbot with unified dataset loader and multiple AI providers."""
         self.unified_loader = UnifiedDatasetLoader()
         self.datasets = {}
         self.knowledge_base = {}
@@ -33,8 +34,12 @@ class ComprehensiveChatbot:
         self._response_cache = {}
         self._cache_ttl = int(os.getenv('CACHE_TTL_SECONDS', '3600'))  # 1 hour default
         
-        # Initialize Gemini AI as the primary AI provider
+        # Initialize AI providers with fallback chain
+        # 1. Gemini AI (Google's model - fast and good)
         self.gemini_ai = GeminiNutritionAI()
+        
+        # 2. LangChain + HuggingFace (fallback with multiple options)
+        self.langchain_ai = get_langchain_ai()
         
         # Load all datasets through unified loader
         self._load_all_datasets()
@@ -51,6 +56,7 @@ class ComprehensiveChatbot:
         print(f"✓ Response caching enabled (TTL: {self._cache_ttl}s)")
         print(f"✓ AI timeout: {self.ai_timeout}s")
         print(f"✓ Gemini AI available: {self.gemini_ai.available}")
+        print(f"✓ LangChain AI available: {self.langchain_ai.available}")
         print(f"{'='*80}\n")
 
 
@@ -450,14 +456,22 @@ class ComprehensiveChatbot:
             answer_parts = self._handle_general_question(keywords, trimester)
         
         if not answer_parts:
-            # Try AI fallback with Gemini
+            # Multi-tier AI fallback chain
             if self._rate_limit_allows():
                 context = self._create_default_context(trimester, region)
+                
+                # Try Gemini first (fast and good quality)
                 gemini_ans = self.gemini_ai.enhance_chatbot_response(question, context)
                 if gemini_ans:
                     return f"🤖 **AI-Powered Answer:**\n\n{gemini_ans}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
+                
+                # Fallback to LangChain + HuggingFace
+                langchain_ans = self.langchain_ai.generate_response(question, context)
+                if langchain_ans:
+                    return f"🤖 **AI-Powered Answer:**\n\n{langchain_ans}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
             
-            return self._get_general_answer(intent, trimester)
+            # Final fallback: Rule-based response from LangChain AI
+            return self.langchain_ai.get_fallback_response(question)
         
         final_answer = '\n'.join(answer_parts)
         
@@ -465,15 +479,23 @@ class ComprehensiveChatbot:
         if trimester:
             final_answer += f"\n\n💡 Tip: Always consult your doctor before making major dietary changes."
         
-        # If final answer is still empty, try Gemini AI fallback
+        # If final answer is still empty, try multi-tier AI fallback
         if not final_answer.strip():
             if self._rate_limit_allows():
                 context = self._create_default_context(trimester, region)
+                
+                # Try Gemini first
                 gemini_ans = self.gemini_ai.enhance_chatbot_response(question, context)
                 if gemini_ans:
                     return self._format_ai_response(gemini_ans)
+                
+                # Fallback to LangChain + HuggingFace
+                langchain_ans = self.langchain_ai.generate_response(question, context)
+                if langchain_ans:
+                    return self._format_ai_response(langchain_ans)
             
-            return self._get_general_answer(intent, trimester)
+            # Final fallback: Rule-based response
+            return self.langchain_ai.get_fallback_response(question)
         
         return final_answer
 
