@@ -172,6 +172,87 @@
             transform: translateY(-8px);
         }
     }
+
+    /* Feedback row */
+    .feedback-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 0.6rem;
+        font-size: 0.85rem;
+        color: #6c757d;
+    }
+
+    .feedback-btn {
+        background: none;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 0.2rem 0.6rem;
+        cursor: pointer;
+        transition: background 0.2s;
+        font-size: 1rem;
+    }
+
+    .feedback-btn:hover {
+        background: #f0f0f0;
+    }
+
+    .feedback-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    /* Follow-up card */
+    .followup-card {
+        border-left: 4px solid #17a2b8;
+        background: #e8f8fc;
+        border-radius: 8px;
+        padding: 1rem 1.25rem;
+        margin-bottom: 1.5rem;
+        max-width: 90%;
+        animation: fadeIn 0.3s ease-in;
+    }
+
+    .followup-option-btn {
+        display: block;
+        width: 100%;
+        text-align: left;
+        margin: 0.3rem 0;
+        padding: 0.5rem 0.8rem;
+        border: 1px solid #17a2b8;
+        border-radius: 6px;
+        background: white;
+        color: #0c5460;
+        cursor: pointer;
+        transition: background 0.2s;
+        font-size: 0.9rem;
+    }
+
+    .followup-option-btn:hover {
+        background: #d1ecf1;
+    }
+
+    /* Trimester badge inline */
+    .trimester-inline-badge {
+        display: inline-block;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 0.15rem 0.55rem;
+        border-radius: 20px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        vertical-align: middle;
+        margin-left: 0.4rem;
+    }
+
+    /* Toast notification */
+    #feedback-toast {
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        z-index: 9999;
+        min-width: 220px;
+    }
 </style>
 {% endblock %}
 
@@ -268,6 +349,15 @@
         </div>
     </div>
 </div>
+
+<!-- Toast notification container -->
+<div id="feedback-toast" class="toast align-items-center text-white border-0" role="alert" aria-live="assertive" style="display:none;">
+    <div class="d-flex">
+        <div class="toast-body" id="toast-body"></div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" onclick="hideToast()"></button>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -349,27 +439,32 @@
         }
     }
 
-    function sendQuestion() {
+    function sendQuestion(overrideQuestion, contextAnswers) {
         const input = document.getElementById('question-input');
-        const question = input.value.trim();
+        const question = overrideQuestion || input.value.trim();
         
         if (!question) {
             input.focus();
             return;
         }
 
-        // Add user message to chat
-        addMessage('user', question);
-        
-        // Store in history
-        messageHistory.push(question);
-        
-        // Clear input
-        input.value = '';
-        input.focus();
+        if (!overrideQuestion) {
+            // Add user message to chat
+            addMessage('user', question);
+            // Store in history
+            messageHistory.push(question);
+            // Clear input
+            input.value = '';
+            input.focus();
+        }
 
         // Show thinking indicator
         const loadingId = addMessage('bot', '<div class="thinking-indicator"><span>🤔 Analyzing your question...</span><div class="thinking-dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div>');
+
+        const payload = { question: question };
+        if (contextAnswers) {
+            payload.context_answers = contextAnswers;
+        }
 
         // Send to API with better error handling
         fetch('/chatbot/api/ask', {
@@ -377,8 +472,7 @@
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ question: question }),
-            timeout: 30000 // 30 second timeout
+            body: JSON.stringify(payload)
         })
         .then(response => {
             if (!response.ok) {
@@ -391,6 +485,12 @@
             removeMessage(loadingId);
             
             if (data.success) {
+                // --- Feature 2: Follow-up card ---
+                if (data.needs_followup) {
+                    renderFollowupCard(data);
+                    return;
+                }
+
                 // Display Query Reflection first (Shows bot understood the question)
                 if (data.query_reflection) {
                     const reflectionMsg = `<div style="background-color: #e8f4f8; border-left: 4px solid #17a2b8; padding: 0.75rem; margin-bottom: 1rem; border-radius: 4px;">
@@ -399,9 +499,18 @@
                     addMessage('bot', reflectionMsg);
                 }
                 
+                // --- Feature 8: Trimester context badge ---
+                let trimesterBadgeHtml = '';
+                if (data.trimester_context) {
+                    trimesterBadgeHtml = `<span class="trimester-inline-badge">T${data.trimester}</span>`;
+                }
+
                 // Format answer with proper markdown rendering
                 const formattedAnswer = formatAnswerAsHTML(data.answer);
-                addMessage('bot', formattedAnswer);
+                const msgId = addMessage('bot', trimesterBadgeHtml + formattedAnswer);
+
+                // --- Feature 1: Feedback row ---
+                addFeedbackRow(msgId, question, data.answer);
                 
                 // Reload history
                 loadHistory();
@@ -415,6 +524,142 @@
             console.error('Error:', error);
             addMessage('bot', '<span class="text-danger"><strong>⚠️ Error:</strong> Something went wrong. Please try again or rephrase your question.</span>');
         });
+    }
+
+    // --- Feature 2: Render follow-up clarification card ---
+    function renderFollowupCard(data) {
+        const container = document.getElementById('chat-container');
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'followup-card';
+
+        const header = document.createElement('strong');
+        header.style.color = '#0c5460';
+        header.innerHTML = '<i class="fas fa-question-circle"></i> Quick Clarification';
+        cardDiv.appendChild(header);
+
+        const qPara = document.createElement('p');
+        qPara.className = 'mt-2 mb-2';
+        qPara.style.color = '#0c5460';
+        qPara.textContent = data.followup_question;
+        cardDiv.appendChild(qPara);
+
+        const optionContainer = document.createElement('div');
+        (data.options || []).forEach(opt => {
+            const btn = document.createElement('button');
+            btn.className = 'followup-option-btn';
+            btn.textContent = opt;
+            btn.addEventListener('click', function() {
+                cardDiv.remove();
+                addMessage('user', opt);
+                const contextAnswers = {};
+                contextAnswers[data.context_key] = opt;
+                sendQuestion(data.original_question, contextAnswers);
+            });
+            optionContainer.appendChild(btn);
+        });
+        cardDiv.appendChild(optionContainer);
+
+        container.appendChild(cardDiv);
+        setTimeout(() => { container.scrollTop = container.scrollHeight; }, 100);
+    }
+
+    // --- Feature 1: Feedback row ---
+    function addFeedbackRow(msgId, question, answer) {
+        const msgEl = document.getElementById(msgId);
+        if (!msgEl) return;
+
+        const feedbackDiv = document.createElement('div');
+        feedbackDiv.className = 'feedback-row';
+
+        const wasHelpfulLabel = '{{ get_translation("chatbot_was_helpful", current_language) if get_translation("chatbot_was_helpful", current_language) != "chatbot_was_helpful" else "Was this helpful?" }}';
+        const thumbsUpLabel = '{{ get_translation("chatbot_helpful", current_language) if get_translation("chatbot_helpful", current_language) != "chatbot_helpful" else "Helpful" }}';
+        const thumbsDownLabel = '{{ get_translation("chatbot_not_helpful", current_language) if get_translation("chatbot_not_helpful", current_language) != "chatbot_not_helpful" else "Not helpful" }}';
+
+        const label = document.createElement('span');
+        label.textContent = wasHelpfulLabel;
+        feedbackDiv.appendChild(label);
+
+        const upBtn = document.createElement('button');
+        upBtn.className = 'feedback-btn';
+        upBtn.title = thumbsUpLabel;
+        upBtn.textContent = '👍';
+        upBtn.addEventListener('click', function() {
+            submitFeedback(upBtn, downBtn, feedbackDiv, msgId, question, answer, 'up');
+        });
+
+        const downBtn = document.createElement('button');
+        downBtn.className = 'feedback-btn';
+        downBtn.title = thumbsDownLabel;
+        downBtn.textContent = '👎';
+        downBtn.addEventListener('click', function() {
+            submitFeedback(upBtn, downBtn, feedbackDiv, msgId, question, answer, 'down');
+        });
+
+        feedbackDiv.appendChild(upBtn);
+        feedbackDiv.appendChild(downBtn);
+        msgEl.appendChild(feedbackDiv);
+    }
+
+    function submitFeedback(upBtn, downBtn, feedbackDiv, msgId, question, answer, rating) {
+        // Disable both feedback buttons
+        upBtn.disabled = true;
+        downBtn.disabled = true;
+
+        if (rating === 'up') {
+            feedbackDiv.innerHTML = '<span class="text-success">Thanks for your feedback! 😊</span>';
+            postFeedback(msgId, question, answer, rating);
+            return;
+        }
+
+        // For thumbs-down, show spinner and regenerate
+        feedbackDiv.innerHTML = '<span class="text-muted"><span class="spinner-border spinner-border-sm me-1" role="status"></span>🔄 Getting you a better answer…</span>';
+
+        postFeedback(msgId, question, answer, rating)
+            .then(data => {
+                if (data && data.regenerated && data.answer) {
+                    feedbackDiv.innerHTML = '';
+                    // Show "improved answer" header
+                    const headerDiv = document.createElement('div');
+                    headerDiv.style.marginTop = '0.8rem';
+                    const headerStrong = document.createElement('strong');
+                    headerStrong.style.color = '#17a2b8';
+                    headerStrong.textContent = "Here's an improved answer:";
+                    headerDiv.appendChild(headerStrong);
+                    feedbackDiv.parentElement.appendChild(headerDiv);
+                    // Render regenerated answer
+                    const regenDiv = document.createElement('div');
+                    regenDiv.className = 'mt-2';
+                    regenDiv.innerHTML = formatAnswerAsHTML(data.answer);
+                    feedbackDiv.parentElement.appendChild(regenDiv);
+                } else {
+                    feedbackDiv.innerHTML = '<span class="text-muted">Thanks for your feedback!</span>';
+                }
+            })
+            .catch(() => {
+                feedbackDiv.innerHTML = '<span class="text-muted">Thanks for your feedback!</span>';
+            });
+    }
+
+    function postFeedback(messageId, question, answer, rating) {
+        return fetch('/chatbot/api/feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message_id: messageId, question, answer, rating })
+        }).then(r => r.json());
+    }
+
+    // Toast helpers
+    function showToast(msg, type) {
+        const toast = document.getElementById('feedback-toast');
+        const body = document.getElementById('toast-body');
+        toast.className = `toast align-items-center text-white border-0 bg-${type || 'success'}`;
+        body.textContent = msg;
+        toast.style.display = 'block';
+        setTimeout(hideToast, 3000);
+    }
+
+    function hideToast() {
+        document.getElementById('feedback-toast').style.display = 'none';
     }
 
     function formatAnswerAsHTML(text) {
@@ -470,9 +715,6 @@
         // Handle inline code blocks
         html = html.replace(/`([^`]+)`/g, '<code style="background: #f0f0f0; padding: 0.2rem 0.4rem; border-radius: 3px; font-size: 0.9em;">$1</code>');
         
-        // Handle emojis - preserve them
-        // Already in text after escaping
-        
         // Handle line breaks - convert remaining newlines
         html = html.replace(/\n/g, '<br>');
         
@@ -518,6 +760,7 @@
     }
 
     function escapeHtml(text) {
+        if (typeof text !== 'string') return String(text || '');
         const map = {
             '&': '&amp;',
             '<': '&lt;',

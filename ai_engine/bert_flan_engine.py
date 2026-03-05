@@ -50,10 +50,17 @@ class BertFlanEngine:
             
             # Load Flan-T5 for answer generation
             print("🔄 Loading Flan-T5 model for answer generation...")
-            self._flan_tokenizer = T5Tokenizer.from_pretrained('google/flan-t5-small')
-            self._flan_model = T5ForConditionalGeneration.from_pretrained('google/flan-t5-small').to(device)
+            flan_model_name = 'google/flan-t5-base'
+            try:
+                self._flan_tokenizer = T5Tokenizer.from_pretrained(flan_model_name)
+                self._flan_model = T5ForConditionalGeneration.from_pretrained(flan_model_name).to(device)
+                print(f"✓ Flan-T5-base model loaded")
+            except Exception as e:
+                print(f"⚠ Could not load {flan_model_name}, falling back to flan-t5-small: {e}")
+                self._flan_tokenizer = T5Tokenizer.from_pretrained('google/flan-t5-small')
+                self._flan_model = T5ForConditionalGeneration.from_pretrained('google/flan-t5-small').to(device)
+                print(f"✓ Flan-T5-small model loaded (fallback)")
             self._flan_model.eval()
-            print("✓ Flan-T5 model loaded")
             
             self._device = device
             self._models_loaded = True
