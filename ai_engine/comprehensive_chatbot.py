@@ -1,4 +1,5 @@
 """Comprehensive Chatbot with Access to ALL Datasets + Multi-AI Support."""
+import datetime as _dt
 import pandas as pd
 from typing import Dict, List, Optional
 import os
@@ -301,6 +302,83 @@ class ComprehensiveChatbot:
                     elif '3' in trimester_str:
                         self.knowledge_base['trimester_specific'][3].append(row.to_dict())
     
+    def is_pregnancy_related(self, question: str) -> bool:
+        """
+        Check if a question is related to pregnancy/maternal health.
+
+        Returns True if question appears pregnancy-related, False for clearly
+        off-topic queries (sports, weather, finance, etc.).
+        """
+        question_lower = question.lower()
+
+        pregnancy_keywords = [
+            "pregnancy", "pregnant", "baby", "trimester", "food", "eat", "diet",
+            "nutrition", "maternal", "mother", "birth", "labor", "morning sickness",
+            "prenatal", "postnatal", "breastfeed", "folic", "iron", "calcium",
+            "vitamin", "health", "doctor", "hospital", "nausea", "contraction",
+            "delivery", "lactation", "infant", "newborn", "fetus", "womb",
+        ]
+
+        off_topic_keywords = [
+            "weather", "cricket", "football", "sports", "politics", "movie",
+            "stock", "finance", "recipe", "coding", "programming", "computer",
+            "phone", "travel", "hotel", "flight", "soccer", "basketball",
+            "election", "actor", "singer", "game", "currency",
+        ]
+
+        if any(kw in question_lower for kw in pregnancy_keywords):
+            return True
+
+        if any(kw in question_lower for kw in off_topic_keywords):
+            return False
+
+        return True  # benefit of the doubt
+
+    def needs_followup(self, question: str) -> Optional[dict]:
+        """
+        Check whether a question contains medical condition keywords that
+        require clarification before answering.
+
+        Returns a follow-up prompt dict or None.
+        """
+        question_lower = question.lower()
+
+        if "diabetes" in question_lower:
+            return {
+                "question": (
+                    "To give you the best advice, could you clarify: do you have "
+                    "gestational diabetes (developed during pregnancy) or "
+                    "pre-existing/Type 2 diabetes?"
+                ),
+                "context_key": "diabetes_type",
+                "options": ["Gestational diabetes", "Pre-existing / Type 2 diabetes"],
+            }
+
+        if "blood pressure" in question_lower or "hypertension" in question_lower:
+            return {
+                "question": (
+                    "Do you have pregnancy-induced hypertension or "
+                    "pre-existing high blood pressure?"
+                ),
+                "context_key": "bp_type",
+                "options": [
+                    "Pregnancy-induced (preeclampsia)",
+                    "Pre-existing hypertension",
+                ],
+            }
+
+        if "thyroid" in question_lower:
+            return {
+                "question": (
+                    "Are you dealing with hypothyroidism or hyperthyroidism "
+                    "during pregnancy?"
+                ),
+                "context_key": "thyroid_type",
+                "options": ["Hypothyroidism", "Hyperthyroidism"],
+            }
+
+        return None
+
     def classify_intent(self, question: str) -> str:
         """Classify user intent."""
         question_lower = question.lower()
@@ -308,17 +386,37 @@ class ComprehensiveChatbot:
         # Meal planning - higher priority
         if any(word in question_lower for word in ['meal plan', 'diet plan', 'what to eat', 'what should i eat', 'daily diet', 'menu', 'breakfast', 'lunch', 'dinner', 'snack']):
             return 'meal_plan'
-        
+
+        # Foods to eat (broader patterns - before safety_check)
+        if any(phrase in question_lower for phrase in ['what foods', 'which foods', 'best foods']):
+            return 'foods_to_eat'
+
+        # Foods to avoid (broader patterns - before safety_check)
+        if any(phrase in question_lower for phrase in ['what to avoid', 'which to avoid', 'not eat', "don't eat", 'dont eat']):
+            return 'foods_to_avoid'
+
         # Safety questions
-        if any(word in question_lower for word in ['can i eat', 'is it safe', 'should i avoid', 'can i have', 'safe to eat', 'okay to eat']):
+        if any(word in question_lower for word in ['can i eat', 'is it safe', 'should i avoid', 'can i have', 'safe to eat', 'okay to eat', 'is safe', 'good for', 'bad for']):
             return 'safety_check'
+
+        # General info
+        if any(phrase in question_lower for phrase in ['tell me about', 'information about', 'what is']):
+            return 'general'
+
+        # Portion / quantity questions
+        if any(phrase in question_lower for phrase in ['how much', 'how many', 'portions', 'serving']):
+            return 'portion_size'
+
+        # Cooking tips
+        if any(phrase in question_lower for phrase in ['cook', 'prepare', 'recipe']):
+            return 'cooking_tips'
         
-        # Foods to avoid
-        if any(word in question_lower for word in ['avoid', 'dont eat', 'not eat', "shouldn't eat", 'dangerous', 'foods to avoid', 'what not to']):
+        # Foods to avoid (legacy patterns)
+        if any(word in question_lower for word in ['avoid', "shouldn't eat", 'dangerous', 'foods to avoid', 'what not to']):
             return 'foods_to_avoid'
         
         # Benefits questions
-        if any(word in question_lower for word in ['benefits', 'good for', 'why eat', 'nutrients', 'nutritional', 'advantages', 'helps with', 'benefit of']):
+        if any(word in question_lower for word in ['benefits', 'why eat', 'nutrients', 'nutritional', 'advantages', 'helps with', 'benefit of']):
             return 'benefits'
         
         # Trimester specific
@@ -356,7 +454,14 @@ class ComprehensiveChatbot:
             'avocado', 'quinoa', 'tofu', 'hummus', 'pomegranate', 'oats',
             'broccoli', 'carrot', 'cucumber', 'lettuce', 'kale',
             'strawberry', 'blueberry', 'watermelon', 'grapes',
-            'brown rice', 'white rice', 'coconut', 'almond milk', 'soy milk'
+            'brown rice', 'white rice', 'coconut', 'almond milk', 'soy milk',
+            # Additional Indian foods
+            'amla', 'neem', 'tulsi', 'moringa', 'drumstick', 'bitter gourd',
+            'ash gourd', 'snake gourd', 'ridge gourd', 'bottle gourd',
+            'fenugreek', 'methi', 'curry leaves', 'coriander', 'turmeric',
+            'cumin', 'black sesame', 'white sesame', 'pumpkin seeds',
+            'flax seeds', 'chia seeds', 'tamarind', 'kokum', 'jackfruit',
+            'litchi', 'custard apple', 'wood apple', 'star fruit',
         ]
         
         # Check all foods in knowledge base
@@ -484,6 +589,14 @@ class ComprehensiveChatbot:
         elif intent == 'seasonal':
             answer_parts = self._handle_seasonal_question(season, keywords)
         
+        # Handle portion size questions
+        elif intent == 'portion_size':
+            answer_parts = self._handle_portion_question(keywords)
+        
+        # Handle cooking tips questions
+        elif intent == 'cooking_tips':
+            answer_parts = self._handle_cooking_tips(keywords)
+        
         # For other intents, check if we have keywords
         elif not keywords:
             return self._get_general_answer(intent, trimester)
@@ -498,76 +611,26 @@ class ComprehensiveChatbot:
         
         # Default: comprehensive response
         else:
-            answer_parts = self._handle_general_question(keywords, trimester)
+            answer_parts = self._handle_general_question_enhanced(keywords, trimester)
         
         if not answer_parts:
-            # Multi-tier AI fallback chain
+            # Multi-tier AI fallback chain (Gemini first for quality)
             if self._rate_limit_allows():
                 context = self._create_default_context(trimester, region)
                 
-                # Try BERT+Flan-T5 first (local models, semantic search + generation)
-                if self.bert_flan_engine and self.bert_flan_engine.is_ready:
-                    try:
-                        # Get relevant context from knowledge base using BERT semantic search
-                        all_knowledge = []
-                        for category, items in self.knowledge_base.items():
-                            if isinstance(items, dict):
-                                for key, value in items.items():
-                                    if isinstance(value, str):
-                                        all_knowledge.append(f"{key}: {value}")
-                                    elif isinstance(value, list):
-                                        all_knowledge.extend([str(item) for item in value[:3]])
-                            elif isinstance(items, list):
-                                all_knowledge.extend([str(item) for item in items[:5]])
-                        
-                        # Use BERT to find most relevant knowledge
-                        relevant_texts = self.bert_flan_engine.semantic_search(
-                            query=question,
-                            knowledge_texts=all_knowledge[:100],  # Limit for performance
-                            top_k=5
-                        )
-                        
-                        # Use Flan-T5 to generate answer from relevant context
-                        context_str = "\n".join(relevant_texts)
-                        bert_flan_answer = self.bert_flan_engine.generate_answer(
-                            question=question,
-                            context=context_str,
-                            max_length=256
-                        )
-                        
-                        if bert_flan_answer and len(bert_flan_answer.strip()) > 30:
-                            return self._format_ai_response(bert_flan_answer, backend='bert_flan_t5')
-                    except Exception as e:
-                        print(f"⚠ BERT+Flan-T5 generation error: {e}")
-                
-                # Try Gemini second (fast and good quality)
+                # 1. Try Gemini first (fast, high quality)
                 gemini_ans = self.gemini_ai.enhance_chatbot_response(question, context)
                 if gemini_ans:
                     return f"🤖 **AI-Powered Answer:**\n\n{gemini_ans}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
                 
-                # Fallback to LangChain + HuggingFace
+                # 2. Try LangChain + HuggingFace second
                 langchain_ans = self.langchain_ai.generate_response(question, context)
                 if langchain_ans:
                     return f"🤖 **AI-Powered Answer:**\n\n{langchain_ans}\n\n💡 Note: This is AI-generated advice. Always consult your doctor for personalized guidance."
-            
-            # Final fallback: Rule-based response from LangChain AI
-            return self.langchain_ai.get_fallback_response(question)
-        
-        final_answer = '\n'.join(answer_parts)
-        
-        # Add pregnancy safety tip at the end
-        if trimester:
-            final_answer += f"\n\n💡 Tip: Always consult your doctor before making major dietary changes."
-        
-        # If final answer is poor quality or empty, try multi-tier AI fallback
-        if self._is_poor_quality_answer(final_answer):
-            if self._rate_limit_allows():
-                context = self._create_default_context(trimester, region)
-                
-                # Try BERT+Flan-T5 first
+
+                # 3. Try BERT+Flan-T5 last (local models, slower)
                 if self.bert_flan_engine and self.bert_flan_engine.is_ready:
                     try:
-                        # Get relevant context from knowledge base
                         all_knowledge = []
                         for category, items in self.knowledge_base.items():
                             if isinstance(items, dict):
@@ -596,16 +659,62 @@ class ComprehensiveChatbot:
                             return self._format_ai_response(bert_flan_answer, backend='bert_flan_t5')
                     except Exception as e:
                         print(f"⚠ BERT+Flan-T5 generation error: {e}")
+            
+            # Final fallback: Rule-based response from LangChain AI
+            return self.langchain_ai.get_fallback_response(question)
+        
+        final_answer = '\n'.join(answer_parts)
+        
+        # Add pregnancy safety tip at the end
+        if trimester:
+            final_answer += f"\n\n💡 Tip: Always consult your doctor before making major dietary changes."
+        
+        # If final answer is poor quality or empty, try multi-tier AI fallback
+        if self._is_poor_quality_answer(final_answer):
+            if self._rate_limit_allows():
+                context = self._create_default_context(trimester, region)
                 
-                # Try Gemini
+                # 1. Gemini first
                 gemini_ans = self.gemini_ai.enhance_chatbot_response(question, context)
                 if gemini_ans:
                     return self._format_ai_response(gemini_ans)
                 
-                # Fallback to LangChain + HuggingFace
+                # 2. LangChain second
                 langchain_ans = self.langchain_ai.generate_response(question, context)
                 if langchain_ans:
                     return self._format_ai_response(langchain_ans)
+
+                # 3. BERT+Flan-T5 last
+                if self.bert_flan_engine and self.bert_flan_engine.is_ready:
+                    try:
+                        all_knowledge = []
+                        for category, items in self.knowledge_base.items():
+                            if isinstance(items, dict):
+                                for key, value in items.items():
+                                    if isinstance(value, str):
+                                        all_knowledge.append(f"{key}: {value}")
+                                    elif isinstance(value, list):
+                                        all_knowledge.extend([str(item) for item in value[:3]])
+                            elif isinstance(items, list):
+                                all_knowledge.extend([str(item) for item in items[:5]])
+                        
+                        relevant_texts = self.bert_flan_engine.semantic_search(
+                            query=question,
+                            knowledge_texts=all_knowledge[:100],
+                            top_k=5
+                        )
+                        
+                        context_str = "\n".join(relevant_texts)
+                        bert_flan_answer = self.bert_flan_engine.generate_answer(
+                            question=question,
+                            context=context_str,
+                            max_length=256
+                        )
+                        
+                        if bert_flan_answer and len(bert_flan_answer.strip()) > 30:
+                            return self._format_ai_response(bert_flan_answer, backend='bert_flan_t5')
+                    except Exception as e:
+                        print(f"⚠ BERT+Flan-T5 generation error: {e}")
             
             # Final fallback: Rule-based response from LangChain AI
             return self.langchain_ai.get_fallback_response(question)
@@ -884,28 +993,252 @@ class ComprehensiveChatbot:
         return answer_parts
     
     def _handle_seasonal_question(self, season: Optional[str], keywords: List[str]) -> List[str]:
-        """Handle seasonal diet questions."""
+        """Handle seasonal diet questions with auto-detection of current season."""
+        # Auto-detect season from current month if not provided
+        if not season:
+            month = _dt.datetime.now().month
+            if 3 <= month <= 5:
+                season = 'summer'
+            elif 6 <= month <= 9:
+                season = 'monsoon'
+            else:
+                season = 'winter'
+
         answer_parts = []
-        
-        seasonal_data = self.knowledge_base['seasonal_foods'].get(season, []) if season else []
-        
+
+        seasonal_data = self.knowledge_base['seasonal_foods'].get(season, [])
+
         if seasonal_data:
-            season_title = season.title() if season else "Seasonal"
-            answer_parts.append(f"🌤️ {season_title.upper()} PREGNANCY DIET\n")
-            
+            season_title = season.title()
+            answer_parts.append(f"🌤️ **{season_title.upper()} PREGNANCY DIET**\n")
+            answer_parts.append(f"Based on the current season ({season_title}), here are recommended foods:\n")
+
             for item in seasonal_data[:10]:
                 if isinstance(item, dict):
-                    answer_parts.append(f"  • {item}")
+                    food_name = (item.get('Food') or item.get('food') or
+                                 item.get('Food Item') or item.get('Meal') or
+                                 item.get('meal') or '')
+                    benefit = (item.get('Benefit') or item.get('benefit') or
+                               item.get('Benefits') or item.get('Health_Benefit') or '')
+                    if food_name:
+                        line = f"  • **{food_name}**"
+                        if benefit:
+                            line += f": {benefit}"
+                        answer_parts.append(line)
+                    else:
+                        # Fall back to raw representation
+                        answer_parts.append(f"  • {item}")
 
-        if not answer_parts and season:
+        if not answer_parts:
             seasonal_meals = self.unified_loader.get_meals_by_preference(season=season)
             if seasonal_meals:
-                answer_parts.append(f"🌤️ {season.title()} MEAL IDEAS:\n")
+                answer_parts.append(f"🌤️ **{season.title()} MEAL IDEAS**:\n")
                 for meal in seasonal_meals[:8]:
-                    meal_name = meal.get('meal') or meal.get('dish') or meal.get('food') or meal.get('name')
+                    meal_name = (meal.get('meal') or meal.get('dish') or
+                                 meal.get('food') or meal.get('name'))
                     if meal_name:
                         answer_parts.append(f"  • {meal_name}")
-        
+
+        if not answer_parts:
+            # Generic seasonal advice
+            seasonal_tips = {
+                'summer': [
+                    "• Hydrating fruits: watermelon, muskmelon, cucumber",
+                    "• Cooling foods: coconut water, buttermilk, lassi",
+                    "• Fresh salads with cucumber, tomato, and mint",
+                    "• Light meals – avoid heavy oily food",
+                    "• Drink 10–12 glasses of water daily",
+                ],
+                'monsoon': [
+                    "• Cooked warm foods to prevent infections",
+                    "• Ginger tea to soothe nausea",
+                    "• Soups and stews with vegetables",
+                    "• Avoid raw/street food due to contamination risk",
+                    "• Include turmeric and ginger for immunity",
+                ],
+                'winter': [
+                    "• Warm soups: tomato, spinach, lentil",
+                    "• Seasonal vegetables: carrots, beets, sweet potato",
+                    "• Dry fruits: almonds, walnuts, dates for warmth",
+                    "• Warm milk with turmeric at night",
+                    "• Ghee in moderation for warmth and nutrition",
+                ],
+            }
+            tips = seasonal_tips.get(season, [])
+            if tips:
+                answer_parts.append(f"🌤️ **{season.title()} Pregnancy Diet Tips:**\n")
+                answer_parts.extend(tips)
+
+        return answer_parts
+
+    def _handle_portion_question(self, keywords: List[str]) -> List[str]:
+        """Handle portion and serving-size questions."""
+        answer_parts = ["📏 **PORTION & SERVING SIZE GUIDE FOR PREGNANCY**\n"]
+
+        portion_info = {
+            'milk': "3 cups (720 ml) per day – rich in calcium and vitamin D",
+            'dairy': "3 servings per day (1 cup milk / 1 cup yogurt / 45g cheese)",
+            'eggs': "1–2 eggs per day – excellent protein and choline source",
+            'fish': "2–3 servings (340g total) per week – choose low-mercury varieties",
+            'meat': "2–3 servings (85–100g per serving) per day",
+            'chicken': "85–100g per serving, 2–3 servings per day",
+            'fruits': "2–4 servings per day (1 medium fruit = 1 serving)",
+            'vegetables': "5+ servings per day (1 cup raw / ½ cup cooked = 1 serving)",
+            'grains': "6–8 servings per day (1 slice bread / ½ cup cooked rice = 1 serving)",
+            'rice': "½ cup cooked = 1 serving; 2–3 servings per day",
+            'nuts': "30g (handful) per day – almonds, walnuts, cashews",
+            'almonds': "8–10 almonds per day",
+            'dates': "3–5 dates per day, especially in third trimester",
+        }
+
+        found_any = False
+        for keyword in keywords:
+            if keyword in portion_info:
+                found_any = True
+                answer_parts.append(f"• **{keyword.title()}**: {portion_info[keyword]}")
+            elif keyword in self.knowledge_base['foods_to_eat']:
+                found_any = True
+                info = self.knowledge_base['foods_to_eat'][keyword]
+                answer_parts.append(f"• **{keyword.title()}**: {info.get('remarks', 'Consume in moderate portions.')}")
+
+        if not found_any:
+            answer_parts.append("**General Portion Guidelines:**")
+            answer_parts.append("• Dairy: 3 cups/day")
+            answer_parts.append("• Protein (meat/eggs/legumes): 2–3 servings/day")
+            answer_parts.append("• Fruits: 2–4 servings/day")
+            answer_parts.append("• Vegetables: 5+ servings/day")
+            answer_parts.append("• Grains: 6–8 servings/day")
+            answer_parts.append("• Fats/Oils: Use sparingly – 2–3 teaspoons/day")
+
+        answer_parts.append("\n💡 Tip: Eat smaller, more frequent meals to manage nausea and heartburn.")
+
+        return answer_parts
+
+    def _handle_cooking_tips(self, keywords: List[str]) -> List[str]:
+        """Handle cooking method / preparation questions."""
+        answer_parts = ["👩‍🍳 **SAFE COOKING TIPS DURING PREGNANCY**\n"]
+
+        generic_tips = [
+            "• **Always cook meat and poultry thoroughly** – internal temp ≥74°C (165°F)",
+            "• **Cook fish until opaque** – internal temp ≥63°C (145°F)",
+            "• **Cook eggs until both yolk and white are firm**",
+            "• **Wash all fruits and vegetables** under running water",
+            "• **Avoid raw sprouts** – rinse and cook them",
+            "• **Use separate cutting boards** for raw meat and produce",
+            "• **Refrigerate leftovers** within 2 hours of cooking",
+            "• **Avoid reheating food more than once**",
+        ]
+
+        food_specific = {
+            'fish': [
+                "• Grill, bake, or steam – avoid deep frying",
+                "• Marinate with lemon and herbs for flavour",
+                "• Never serve raw or undercooked",
+            ],
+            'chicken': [
+                "• Bake, boil, or grill – avoid heavy oil",
+                "• Internal temp must reach 74°C",
+                "• Remove skin to reduce saturated fat",
+            ],
+            'egg': [
+                "• Hard-boil or scramble – avoid sunny-side up",
+                "• Avoid raw egg in batters or dressings",
+            ],
+            'eggs': [
+                "• Hard-boil or scramble – avoid sunny-side up",
+                "• Avoid raw egg in batters or dressings",
+            ],
+            'vegetables': [
+                "• Steam to preserve nutrients",
+                "• Avoid overcooking leafy greens",
+                "• Wash thoroughly before cooking",
+            ],
+        }
+
+        found_specific = False
+        for keyword in keywords:
+            if keyword in food_specific:
+                found_specific = True
+                answer_parts.append(f"\n**{keyword.title()} – Cooking Tips:**")
+                answer_parts.extend(food_specific[keyword])
+
+        answer_parts.append("\n**🔥 General Safe Cooking Practices:**")
+        answer_parts.extend(generic_tips)
+
+        return answer_parts
+
+    def _handle_general_question_enhanced(self, keywords: List[str], trimester: Optional[int]) -> List[str]:
+        """
+        Enhanced general question handler:
+        1. Searches foods_to_eat and foods_to_avoid knowledge base.
+        2. Searches all loaded DataFrames for keyword matches.
+        3. Falls through to AI if nothing found.
+        """
+        answer_parts = []
+        found_any = False
+
+        for keyword in keywords:
+            if keyword in self.knowledge_base['foods_to_eat']:
+                found_any = True
+                info = self.knowledge_base['foods_to_eat'][keyword]
+                answer_parts.append(f"✓ **{keyword.title()}** *(Safe to eat)*")
+                if info.get('nutrients'):
+                    answer_parts.append(f"  🔬 Nutrients: {info['nutrients']}")
+                if info.get('benefit'):
+                    answer_parts.append(f"  💪 Benefits: {info['benefit']}")
+                if info.get('remarks'):
+                    answer_parts.append(f"  💡 Note: {info['remarks']}")
+                answer_parts.append("")
+
+            elif keyword in self.knowledge_base['foods_to_avoid']:
+                found_any = True
+                info = self.knowledge_base['foods_to_avoid'][keyword]
+                answer_parts.append(f"⚠️ **{keyword.title()}** *(Caution – often avoided)*")
+                if info.get('risk'):
+                    answer_parts.append(f"  ❗ Risk: {info['risk']}")
+                if info.get('recommendation'):
+                    answer_parts.append(f"  📌 Advice: {info['recommendation']}")
+                answer_parts.append("")
+
+        # Search DataFrames for additional matches
+        if not found_any:
+            for category, dataset_group in self.datasets.items():
+                for name, df in dataset_group.items():
+                    if df.empty:
+                        continue
+                    for keyword in keywords:
+                        try:
+                            mask = df.apply(
+                                lambda col: col.astype(str).str.contains(
+                                    keyword, case=False, na=False
+                                )
+                            ).any(axis=1)
+                            matches = df[mask].head(3)
+                            for _, row in matches.iterrows():
+                                food_col = (row.get('Food Item') or row.get('Food') or
+                                            row.get('food') or row.get('meal') or
+                                            row.get('Meal') or keyword)
+                                answer_parts.append(f"• **{str(food_col).title()}** (from {name})")
+                                found_any = True
+                        except Exception:
+                            pass
+                if found_any:
+                    break
+
+        # Fall through to AI if still nothing
+        if not found_any and keywords and self._rate_limit_allows():
+            for keyword in keywords[:3]:
+                context = self._create_default_context(trimester)
+                gemini_info = self.gemini_ai.enhance_chatbot_response(
+                    f"Tell me about {keyword} during pregnancy - is it safe? What are the benefits?",
+                    context,
+                )
+                if gemini_info:
+                    answer_parts.append(f"🤖 **{keyword.title()}** (AI-Powered):")
+                    answer_parts.append(gemini_info)
+                    answer_parts.append("")
+                    found_any = True
+
         return answer_parts
     
     def _handle_benefits_question(self, keywords: List[str]) -> List[str]:
@@ -1151,7 +1484,13 @@ class ComprehensiveChatbot:
         
         return dos_default, donts_default
 
-    def answer_question_structured(self, question: str, trimester: Optional[int] = None) -> Dict:
+    def answer_question_structured(
+        self,
+        question: str,
+        trimester: Optional[int] = None,
+        context_answers: Optional[Dict] = None,
+        force_ai: bool = False,
+    ) -> Dict:
         """
         FAST & SMART: Answer question with optional Do's and Don'Ts format.
         INCLUDES: Query reflection (paraphrased understanding) + Direct answer
@@ -1171,6 +1510,8 @@ class ComprehensiveChatbot:
         Args:
             question: User's question
             trimester: Current trimester
+            context_answers: Optional dict of clarified context (e.g. {"diabetes_type": "Gestational"})
+            force_ai: If True, skip the response cache and call AI directly
             
         Returns:
             Dictionary with query_reflection, answer text, and optional dos/donts lists
@@ -1178,9 +1519,9 @@ class ComprehensiveChatbot:
         import time
         start_time = time.time()
         
-        # Check response cache first (instant)
+        # Check response cache first (instant) – skip when force_ai is set
         cache_key = f"{question.lower().strip()}_{trimester or 'any'}"
-        if cache_key in self._response_cache:
+        if not force_ai and cache_key in self._response_cache:
             cached_response = self._response_cache[cache_key]
             # Check if cache is still valid (TTL not expired)
             cache_time = cached_response.get('_cache_time', 0)
@@ -1197,6 +1538,44 @@ class ComprehensiveChatbot:
         # CREATE QUERY REFLECTION - Show bot understood the question
         query_reflection = self._paraphrase_query(question, keywords)
         
+        # If context_answers are provided, incorporate them into the Gemini prompt
+        if context_answers and self.gemini_ai.available and self._rate_limit_allows():
+            context_str = "; ".join(f"{k}: {v}" for k, v in context_answers.items())
+            enriched_question = f"{question} [Context: {context_str}]"
+            context = self._create_default_context(trimester)
+            gemini_ans = self.gemini_ai.enhance_chatbot_response(enriched_question, context)
+            if gemini_ans:
+                response_time = time.time() - start_time
+                return {
+                    'query_reflection': query_reflection,
+                    'answer': self._format_ai_response(gemini_ans, backend='gemini'),
+                    'dos': [],
+                    'donts': [],
+                    'keywords': keywords,
+                    'intent': intent,
+                    'source': 'ai_model',
+                    'response_time': response_time,
+                    'from_cache': False,
+                }
+
+        # If force_ai, go directly to AI
+        if force_ai and self.gemini_ai.available and self._rate_limit_allows():
+            context = self._create_default_context(trimester)
+            gemini_ans = self.gemini_ai.enhance_chatbot_response(question, context)
+            if gemini_ans:
+                response_time = time.time() - start_time
+                return {
+                    'query_reflection': query_reflection,
+                    'answer': self._format_ai_response(gemini_ans, backend='gemini'),
+                    'dos': [],
+                    'donts': [],
+                    'keywords': keywords,
+                    'intent': intent,
+                    'source': 'ai_model',
+                    'response_time': response_time,
+                    'from_cache': False,
+                }
+
         # DETERMINE IF DO'S/DON'TS FORMAT IS NEEDED
         needs_dos_donts = intent in ['safety_check', 'foods_to_avoid', 'trimester_specific', 'general']
         
@@ -1285,10 +1664,27 @@ class ComprehensiveChatbot:
             '_cache_time': time.time()
         }
         
-        # Store in cache for future requests
-        self._response_cache[cache_key] = result.copy()
+        # Store in cache for future requests (not when force_ai)
+        if not force_ai:
+            self._response_cache[cache_key] = result.copy()
         
         return result
+
+    def answer_question_regenerate(
+        self, question: str, trimester: Optional[int] = None
+    ) -> Dict:
+        """
+        Force a fresh Gemini AI answer (bypass dataset cache) for regeneration
+        after negative user feedback.
+
+        Returns:
+            Dictionary with answer, query_reflection, dos, donts, source keys.
+        """
+        return self.answer_question_structured(
+            question=question,
+            trimester=trimester,
+            force_ai=True,
+        )
 
     def quick_answer(self, question: str, trimester: Optional[int] = None) -> str:
         """

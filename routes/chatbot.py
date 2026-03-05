@@ -38,7 +38,8 @@ def ask_question():
     Expects JSON:
         {
             "question": "Can I eat eggs during pregnancy?",
-            "trimester": 2 (optional)
+            "trimester": 2 (optional),
+            "context_answers": {"diabetes_type": "Gestational diabetes"} (optional)
         }
     
     Automatically returns Do's and Don'Ts format with fast response times.
@@ -64,7 +65,8 @@ def ask_question():
         
         region = data.get('region')
         season = data.get('season')
-        
+        context_answers = data.get('context_answers')  # dict or None
+
         # Get comprehensive chatbot with all datasets + Gemini AI fallback
         try:
             chatbot = get_comprehensive_chatbot()
@@ -78,11 +80,78 @@ def ask_question():
                 'answer': 'Sorry, the chatbot is temporarily unavailable. Please try again later.'
             }), 500
 
+        # --- Feature 3: Domain restriction check (before anything else) ---
+        try:
+            if not chatbot.is_pregnancy_related(question):
+                domain_answer = (
+                    "I'm sorry, I can only assist with pregnancy-related queries. "
+                    "Please ask me about nutrition, food safety, meal planning, or other "
+                    "topics related to pregnancy and maternal health."
+                )
+                # Return Telugu translation if user prefers Telugu
+                user_lang = getattr(current_user, 'language', 'en')
+                if user_lang == 'te':
+                    from utils.telugu_translations import CHATBOT_TELUGU_TRANSLATIONS
+                    domain_answer = CHATBOT_TELUGU_TRANSLATIONS.get(
+                        'chatbot_domain_restriction', domain_answer
+                    )
+                return jsonify({
+                    'success': True,
+                    'question': question,
+                    'answer': domain_answer,
+                    'dos': [],
+                    'donts': [],
+                    'query_reflection': 'Non-pregnancy related query detected',
+                    'keywords': [],
+                    'intent': 'domain_restriction',
+                    'source': 'domain_restriction',
+                    'ai_backend': 'rule_based',
+                    'response_time': 0,
+                    'trimester': trimester,
+                    'trimester_context': f'Trimester {trimester} answer' if trimester else None,
+                    'language': getattr(current_user, 'language', 'en'),
+                    'region': region,
+                    'season': season,
+                    'timestamp': datetime.now().isoformat()
+                }), 200
+        except Exception as e:
+            print(f"⚠️ Domain restriction check error: {e}")
+
+        # --- Feature 2: Multi-turn follow-up check (only when no context_answers) ---
+        if not context_answers:
+            try:
+                followup = chatbot.needs_followup(question)
+                if followup:
+                    return jsonify({
+                        'success': True,
+                        'needs_followup': True,
+                        'followup_question': followup['question'],
+                        'context_key': followup['context_key'],
+                        'options': followup['options'],
+                        'original_question': question,
+                        'trimester': trimester,
+                        'language': getattr(current_user, 'language', 'en'),
+                        'timestamp': datetime.now().isoformat()
+                    }), 200
+            except Exception as e:
+                print(f"⚠️ Follow-up check error: {e}")
+
         # Use structured answer to include dos/donts and intent metadata
         try:
+            # Language hint for Telugu users (Feature 7)
+            user_lang = getattr(current_user, 'language', 'en')
+            # If Telugu, append a hint to the question so the AI knows to respond in Telugu
+            ai_question = question
+            if user_lang == 'te' and hasattr(chatbot, 'gemini_ai') and chatbot.gemini_ai.available:
+                ai_question = (
+                    question +
+                    " [Please provide a Telugu summary at the end: "
+                    "దయచేసి తెలుగులో సారాంశం చివర చేర్చండి]"
+                )
             result = chatbot.answer_question_structured(
-                question=question,
-                trimester=trimester
+                question=ai_question,
+                trimester=trimester,
+                context_answers=context_answers,
             )
         except Exception as e:
             print(f"❌ Error generating answer for question '{question}': {e}")
@@ -108,6 +177,9 @@ def ask_question():
         result['region'] = region
         result['season'] = season
         result['ai_backend'] = ai_backend
+        
+        # Trimester context badge (Feature 8)
+        trimester_context = f'Trimester {trimester} answer' if trimester else None
         
         # Log interaction
         try:
@@ -144,6 +216,8 @@ def ask_question():
             'ai_backend': result.get('ai_backend', 'rule_based'),  # 'bert_flan_t5', 'ai_model', 'database', 'rule_based'
             'response_time': round(result.get('response_time', 0), 2),
             'trimester': trimester,
+            'trimester_context': trimester_context,
+            'language': getattr(current_user, 'language', 'en'),
             'region': region,
             'season': season,
             'timestamp': datetime.now().isoformat()
@@ -158,6 +232,86 @@ def ask_question():
             'error': 'Error processing question',
             'answer': 'Sorry, I encountered an error. Please try again.'
         }), 500
+
+
+@chatbot_bp.route('/api/feedback', methods=['POST'])
+@login_required
+def submit_feedback():
+    """
+    Log user feedback (thumbs up/down) for a chatbot answer.
+
+    Expects JSON:
+        {
+            "message_id": "msg-123",
+            "question": "Is fish safe?",
+            "answer": "Yes, low-mercury fish...",
+            "rating": "up" | "down"
+        }
+
+    On thumbs-down, regenerates a fresh answer via Gemini.
+    """
+    try:
+        data = request.get_json()
+
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+
+        question = (data.get('question') or '').strip()
+        answer = (data.get('answer') or '').strip()
+        rating = (data.get('rating') or '').strip().lower()
+        message_id = data.get('message_id', '')
+
+        if rating not in ('up', 'down'):
+            return jsonify({'success': False, 'error': 'rating must be "up" or "down"'}), 400
+
+        # Log feedback interaction
+        try:
+            interaction = UserInteraction(
+                user_id=current_user.id,
+                interaction_type='chatbot_feedback'
+            )
+            interaction.set_details({
+                'message_id': message_id,
+                'question': question,
+                'answer': answer,
+                'rating': rating,
+            })
+            db.session.add(interaction)
+            db.session.commit()
+        except Exception as e:
+            print(f"⚠️ Could not log feedback: {e}")
+            db.session.rollback()
+
+        # On thumbs-down, try to regenerate a better answer
+        if rating == 'down' and question:
+            try:
+                chatbot = get_comprehensive_chatbot()
+                trimester = (
+                    current_user.current_trimester
+                    if hasattr(current_user, 'current_trimester')
+                    else None
+                )
+                regen_result = chatbot.answer_question_regenerate(question, trimester)
+                return jsonify({
+                    'success': True,
+                    'regenerated': True,
+                    'answer': regen_result.get('answer', ''),
+                    'query_reflection': regen_result.get('query_reflection', ''),
+                    'dos': regen_result.get('dos', []),
+                    'donts': regen_result.get('donts', []),
+                    'source': regen_result.get('source', 'ai_model'),
+                })
+            except Exception as e:
+                print(f"⚠️ Regeneration failed: {e}")
+                return jsonify({'success': True, 'regenerated': False})
+
+        return jsonify({'success': True, 'regenerated': False})
+
+    except Exception as e:
+        import traceback
+        print(f"❌ Error in feedback: {e}")
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': 'Error processing feedback'}), 500
 
 
 @chatbot_bp.route('/api/suggestions', methods=['GET'])
